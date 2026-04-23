@@ -20,7 +20,7 @@ The sender requests a `TransferLock` with:
 - **transfer_id**: 32-byte identifier (derived from the signing message hash)
 - **witness**: satisfies the sender's deposit descriptor, authorizing the lock
 
-The operator verifies the sender's witness, checks sufficient balance, validates the fee, and appends the operation. The sender's balance is reduced by `amount + fee`, which moves to `locked_balance`.
+The operator verifies the sender's witness, checks sufficient balance, validates the fee, and appends the operation. The source deposit's `locked_balance` is increased by `amount + fee`, earmarking that portion of `balance` for the pending transfer. The `balance` itself is unchanged until the transfer is settled (see DEP-05 for the balance accounting model).
 
 If the destination deposit has `receive_requires_sig`, the request must also include a `receive_signature` from the destination descriptor.
 
@@ -41,7 +41,7 @@ If the timeout is reached without completion, the operator appends `TransferFail
 - **block_hash**: the block hash at timeout height
 - **reason**: failure reason (1 = timeout, 0 = reserved)
 
-On failure: `amount` is returned to the source deposit (minus a smaller timeout fee), and the transfer is removed from pending.
+On failure: the lock on the source (`amount + fee`) is released; the source recovers `amount + proportional_portion_of_fee`, and the **fixed** portion of the fee (`fixed_msats` from the source's `TransferFeeSchedule`) is charged to the source's balance and credited to the operator. The transfer is removed from pending. See DEP-07 §"Fee on Failure" for the full model.
 
 ## Completion Scripts
 

@@ -2,7 +2,7 @@
 
 ## Abstract
 
-This document specifies the quorum membership protocol and collateral mechanics. An operator puts up collateral on quorum member ledgers and, in exchange, those members co-sign the operator's ledger updates. The collateral secures the operator's obligations — if the operator misbehaves, members can confiscate the collateral held on their ledgers.
+This document specifies the quorum membership protocol and collateral mechanics. An operator's UTXO is split into reserves (deposit capacity) and collateral (security bond), both held in the same Taproot output controlled by the quorum. If the operator misbehaves, the quorum confiscates the collateral directly from the operator's own ledger.
 
 ## Quorum Membership
 
@@ -10,11 +10,14 @@ This document specifies the quorum membership protocol and collateral mechanics.
 
 An operator requests another operator to join their quorum. The request includes:
 
-- The member's pubkey and the member's ledger ID (where the operator will open collateral)
-- The operator's collateral commitment (amount and lock duration on the member's ledger)
+- The member's pubkey
 - Fee limits the member imposes (minimum fees the operator must charge)
 
 If the member accepts, the operator appends `QuorumAddMember` (disc 43) to their own ledger, and the member appends `QuorumJoin` (disc 46) to their own ledger. This creates a two-sided auditable record.
+
+`QuorumAddMember` **stages** the member: they are appended to a pending list (`next_quorum_members` in the state model) and gain no voting power yet. A subsequent `QuorumBegin` promotes all staged members to active in a single atomic step (see below). This lets an operator add several members across separate ledger updates and activate them together.
+
+To serve as a quorum member, an operator must have at least `min_member_collateral` collateral at stake on their own ledger(s). This ensures quorum members have skin in the game — misbehavior as a quorum member (e.g., co-signing a non-conforming update) can result in slashing on their own ledger.
 
 ### Member Terms
 
@@ -23,8 +26,7 @@ When joining, each member specifies:
 - **min_fee_bps**: minimum annualized fee rate (basis points) the operator must charge
 - **min_fee_fixed**: minimum annualized fixed fee (msats/year)
 - **max_fee_period**: maximum fee collection period (blocks)
-- **collateral_lock_amount**: minimum collateral the operator must maintain on the member's ledger (msats)
-- **collateral_lock_until**: block height until which the operator's collateral must remain locked
+- **membership_until**: block height until which the member commits to serving
 
 The operator cannot open deposits with fees below the strictest member's minimums. This protects members from inheriting unprofitable obligations after a custody transfer.
 
@@ -39,83 +41,129 @@ Members also specify timing parameters that govern protocol obligations (see DEP
 
 The strictest (smallest) values across all members apply to the quorum. The operator cannot open deposits with descriptors exceeding the quorum's `max_descriptor_bytes` limit.
 
+Members also specify compensation terms — the operator commits to pay each member a share of collected fees (see DEP-07) in exchange for co-signing:
+
+- **compensation_bps**: basis points of collected fees that flow to this member (default 300 = 3%). With Q=7 members at the default, ~21% of fee revenue is distributed to cosigners.
+- **compensation_deposit_id**: deposit on the operator's ledger where the member's share lands. The deposit MUST exist when `QuorumAddMember` is appended.
+- **compensation_frequency_blocks**: cadence at which accrued compensation is paid out (default 2016 ≈ 2 weeks, mirroring the default fee-collection cycle).
+
+These fields are per-member, not reduced to a quorum-wide minimum — different members can negotiate different rates. Omitting them means the member waived compensation.
+
 ### QuorumBegin (disc 12)
 
-Once members are added, the operator rotates reserves into a new Taproot multisig UTXO (see DEP-03). After `QuorumBegin`, co-signatures become required for all subsequent updates. `QuorumBegin` records the `quorum_expiry` (shortest collateral lock) and `total_collateral` (sum of all attestations).
+`QuorumBegin` does two things atomically:
+
+1. **Promotes the staged membership.** The pending set (`next_quorum_members`, populated by `QuorumAddMember`) **replaces** the active voting set wholesale. Anything not in the staged set at `QuorumBegin` time is dropped. This means refreshing an existing quorum requires re-staging every member the operator wants to keep by issuing a fresh `QuorumAddMember` for each before the new `QuorumBegin`.
+2. **Rotates the on-chain multisig.** The operator spends the old reserves UTXO into a new Taproot output whose script reflects the new active member set (see DEP-03).
+
+After `QuorumBegin`, every subsequent update MUST carry co-signatures from a strict majority (`floor(n/2) + 1`) of the new active quorum. This prevents the operator from maintaining parallel chains — a majority of cosigners will have seen and validated the canonical chain before signing any new update. `QuorumBegin` also records the `quorum_expiry` (shortest membership duration) and `collateral_amount_msats`.
 
 ### Removing Members
 
-`QuorumRemoveMember` (disc 44) removes a member from the quorum. This requires a new `QuorumBegin` to update the multisig.
+`QuorumRemoveMember` (disc 44) takes effect **immediately** on the ledger — the named member is dropped from both the active set and the pending set on apply. No subsequent `QuorumBegin` is required for the member to lose voting rights. However, the on-chain Taproot UTXO still encodes the pre-remove member set, so spends continue to require the removed member's signature until the next `QuorumBegin` rotates the multisig. This creates a window in which ledger-level cosig thresholds use the shrunken quorum while on-chain spends cannot proceed without the departing member — operators typically follow a `QuorumRemoveMember` with a `QuorumBegin` in the next ledger update to close the window.
+
+Unlike `QuorumAddMember` (staged) the remove is immediate because the point of removing a member is usually that they have misbehaved or gone silent; making the operator wait until the next rotation to strip voting rights would let a captured member keep vetoing updates in the meantime.
 
 ## Collateral
 
-Collateral is the operator's own capital, deposited and locked on quorum member ledgers. It gives members skin in the game: if the operator misbehaves, the member can confiscate the collateral on their ledger.
+Collateral is a portion of the operator's own UTXO, held in the same Taproot output as reserves. The quorum controls both reserves and collateral. If the operator misbehaves, the quorum confiscates the collateral directly — no cross-ledger coordination required.
 
-### Locking
+### Structure
 
-The operator:
+The operator's UTXO is split into two portions:
 
-1. Opens a deposit on the member's ledger with `is_collateral: true` (see DEP-08)
-2. Funds it with their own capital via on-chain or lightning (see DEP-10)
-3. Locks it with `CollateralLock` (disc 45), specifying amount, lock_until_block, and the operator being backed
+    UTXO = reserves + collateral
 
-The locked collateral cannot be withdrawn until the lock expires.
+- **Reserves**: the deposit capacity — wallets can deposit up to this amount
+- **Collateral**: the security bond — cannot be used for deposits, at risk of slashing
 
-### Attestation
+Both live in the same Taproot output, controlled by the same quorum via tiered spending paths (see DEP-03). Both `reserves_amount_msats` and `collateral_amount_msats` are declared in `LedgerOpen` and `QuorumBegin`. Co-signers MUST verify that `reserves_amount_msats + collateral_amount_msats` equals the on-chain UTXO value (in msats). `QuorumBegin` may update either value (e.g., to adjust the ratio), subject to quorum member agreement via co-signature.
 
-After the operator locks collateral on a member's ledger, the member returns a signed attestation confirming the lock. The operator then publishes a `CollateralAttestation` (disc 42) on their own ledger, wrapping the member's attestation. This proves to anyone reading the operator's ledger that collateral backing exists on the member's ledger.
+### Slashing
 
-The attestation includes: which member holds the collateral, which ledger it's on, the amount, the lock expiry, and the member's signature.
+When the operator is proven non-conforming (see DEP-06), the quorum confiscates the entire UTXO. The collateral portion is the operator's real loss — deposits are owed back to depositors, but the collateral is forfeited. The lottery winner (see DEP-03) takes over the ledger, inherits obligations, and retains the collateral as compensation for assuming custody.
+
+If the operator misbehaves as a **quorum member** on another operator's ledger (e.g., co-signs a non-conforming update), proof of this misbehavior can be presented to the misbehaving member's own quorum, triggering slashing on their own ledger.
+
+### Multi-Ledger Operators
+
+Operators SHOULD run multiple ledgers (recommended: 3-5) with **independent quorums** per ledger. This provides:
+
+1. **Probabilistic safety**: an attacker must compromise all quorums simultaneously to avoid losing collateral. With Q=5 at 33% adversarial, P(all 5 ledgers compromised) < 0.004%.
+2. **Partial confiscation**: misbehavior on one ledger triggers slashing on the others, as the honest quorums on remaining ledgers detect and act.
+3. **Capital efficiency**: the same total UTXO is split across ledgers, each with independent security.
+
+The UTXO is split evenly: each ledger gets UTXO/L in reserves and UTXO/L in collateral (for L ledgers).
 
 ## Obligation Limits
 
-A ledger's total obligations (sum of all deposit balances and locked amounts) must not exceed the least of:
+A ledger's total obligations — the sum of every deposit's `balance` — must not exceed the reserves amount (from QuorumBegin). This is enforced when creating new funding offers or invoices (see DEP-10).
 
-1. The reserves amount (from LedgerOpen/QuorumBegin)
-2. The sum of all attested collateral (`total_collateral` from QuorumBegin)
-3. Twice the smallest `collateral_lock_amount` across all quorum members
+### Balance Accounting Model
 
-This is enforced when creating new funding offers or invoices (see DEP-10). The `total_collateral` field on `QuorumBegin` gives wallets a single co-signed value to check against.
+Each deposit has two fields:
+
+- **`balance`**: the total obligation the operator owes for this deposit (msats). This is the authoritative figure counted toward the ledger's obligations.
+- **`locked_balance`**: a subset of `balance` that is currently earmarked for in-flight operations (pending transfers, invoice locks). It is not a separate bucket of funds and is not additive with `balance`.
+
+Per-deposit spendable funds are `available_balance = balance - locked_balance`. Locking funds for an in-flight operation does not change the deposit's `balance` or the ledger's total obligation — the funds were already counted. Only settlement (credit/debit/fulfill) changes `balance`.
 
 ### Security Model
 
-Consider a 3-member quorum where each member holds collateral C:
+Consider an operator with UTXO = U, reserves fraction R, collateral fraction C = 1-R:
 
-- Total collateral at risk: 3C (one deposit per member)
-- Maximum obligations: 2C (from limit #3)
-- Reserves UTXO: ≥ 2C (from limit #1)
+- **Per ledger**: reserves = U×R/L, collateral = U×C/L (for L ledgers)
+- **Attack gain**: at most U×R/L per compromised ledger (stolen deposits)
+- **Attack cost**: U×C/L per ledger where quorum retains honest majority (collateral slashed)
 
-A coordinated theft yields at most 2C but costs 3C in confiscated collateral — the attack costs 1.5× what it gains. In the non-colluding failure case (operator disappears), the reserves UTXO covers obligations at 1:1, and the quorum spends it to a new custodian via the lottery (see DEP-06).
+With R=40%, C=60%, L=5: each compromised ledger yields 0.08U in stolen deposits, but each slashed ledger costs the attacker 0.12U. The attacker must compromise more ledgers than they lose — which requires controlling majority of most quorums simultaneously.
 
-### Multi-Ledger Collateral
+Simulation results (N=50 operators, Q=5, 500 trials, sybil-optimal attacker):
 
-The same collateral deposit on a member's ledger may back multiple ledgers of the same operator. Wallets should prefer operators with non-overlapping collateral sources, as shared collateral provides weaker per-ledger coverage. The mechanism for discovering and accounting for multi-ledger collateral reuse is an open design question.
+| Reserves | Collateral | L | Max safe sybil% |
+|:---:|:---:|:---:|:---:|
+| 50% | 50% | 1 | 29% |
+| 50% | 50% | 3 | 35% |
+| 50% | 50% | 5 | 39% |
+| 40% | 60% | 5 | 49% |
+| 33% | 67% | 3 | 49% |
+
+See PROPOSAL.md for full simulation methodology and parameter sweep.
 
 ## Co-Signer Obligations
 
-Quorum members must maintain a full state replica of any ledger they co-sign for. Before co-signing an update, the member must verify:
+Quorum members must maintain a full state replica of any ledger they co-sign for. Before co-signing an update, the member MUST verify:
 
-1. The running total of obligations does not exceed the obligation limits above
-2. The update conforms to protocol rules (valid fees, correct balances, authorized operations)
-3. The hash chain is intact (previous_hash matches the last chain_hash)
+1. **Chain continuity**: the update's `previous_hash` matches the member's last validated `chain_hash`
+2. **State validity**: the operation can be applied to the member's local state replica without error (deposit exists, sufficient balance, valid fees, etc.)
+3. **Obligation limits**: the running total of obligations does not exceed reserves
+4. **Collateral preservation**: operations do not reduce the collateral portion below `collateral_amount_msats`
+5. **No dispute filed**: the member has not filed a dispute fork for this ledger
 
-Co-signing without state validation is non-conforming — a member who co-signs an update that violates obligation limits is complicit in the violation and may have their own collateral confiscated on other ledgers where they are operators.
+If any check fails, the member MUST refuse to co-sign. The chain continuity check (1) is the primary defense against parallel chains — if the operator has published a non-conforming update that the member rejected, subsequent updates will have a different `previous_hash` and the member will refuse.
+
+### Majority Requirement
+
+After `QuorumBegin`, every update requires `floor(n/2) + 1` co-signatures from distinct quorum members. This ensures a majority of the quorum has validated every update. Since each cosigner verifies chain continuity from their own tip, the operator cannot obtain a majority for two different updates at the same sequence number — at least one member of any majority will have already signed the other version and will refuse.
+
+### Conformance
+
+Co-signing without state validation is non-conforming — a member who co-signs an update that violates obligation limits is complicit in the violation and may have their own collateral slashed on their own ledger(s).
 
 ### Membership Duration
 
-Quorum membership duration is limited by `quorum_expiry` — the shortest member's `collateral_lock_until`. After this block, the operator's collateral may be withdrawn by the operator (lock expired), and the quorum must be refreshed via a new `QuorumBegin`.
+Quorum membership duration is limited by `quorum_expiry` — the shortest member's `membership_until`. Before this block, the operator must refresh the quorum via a new `QuorumBegin`.
 
 ### Confiscation
 
-If the operator is proven non-conforming (see DEP-06), members may confiscate the operator's collateral held on their ledgers. This is the primary economic deterrent against operator misbehavior.
+If the operator is proven non-conforming (see DEP-06), the quorum confiscates the operator's UTXO. The collateral portion is forfeited; deposit obligations are transferred to the new custodian. This is the primary economic deterrent against operator misbehavior.
 
 ## Related DEPs
 
-- [DEP-02](DEP-02.md): Wire format (QuorumAddMember, QuorumRemoveMember, QuorumJoin, QuorumBegin, CollateralAttestation, CollateralLock fields)
-- [DEP-03](DEP-03.md): On-chain transactions (reserves rotation, tapscript multisig)
+- [DEP-02](DEP-02.md): Wire format (QuorumAddMember, QuorumRemoveMember, QuorumJoin, QuorumBegin fields)
+- [DEP-03](DEP-03.md): On-chain transactions (reserves rotation, tapscript multisig, collateral in UTXO)
 - [DEP-06](DEP-06.md): Fraud proofs and recovery (quorum members initiate disputes, confiscation)
 - [DEP-07](DEP-07.md): Fee schedules (fee limits negotiated by quorum members)
-- [DEP-08](DEP-08.md): Deposits (collateral deposits)
 - [DEP-10](DEP-10.md): Payment channels (obligation limits enforced at offer/invoice creation)
-- [DEP-11](DEP-11.md): Time obligations (quorum rotation, collateral maintenance)
+- [DEP-11](DEP-11.md): Time obligations (quorum rotation)
 - [DEP-12](DEP-12.md): Certified delivery (service_response_blocks enforcement)

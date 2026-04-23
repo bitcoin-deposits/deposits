@@ -15,23 +15,40 @@ Wallets connect to both: operator relays for requests, ledger relays for reading
 
 ## Event Kinds
 
-| Kind | Name | Persistence | Description |
-|---|---|---|---|
-| 9100 | Ledger Update | Durable | Signed ledger update (base64 TLV, see DEP-02) |
-| 9101 | Fraud Proof | Durable | Fraud proof broadcast (JSON, see DEP-06) |
-| 9103 | Dispute | Durable | Custody dispute notification (JSON) |
-| 9104 | Recovery Agreement | Durable | Quorum member recovery agreement (JSON) |
-| 9105 | Delivery Escalation | Durable | Wallet escalation of unprocessed request (JSON) |
-| 20101 | Request | Ephemeral | Wallet-to-operator request (JSON) |
-| 20102 | Response | Ephemeral | Operator-to-wallet response (JSON) |
-| 39100 | Advertisement | Replaceable | Operator terms (JSON, NIP-33) |
-| 39101 | Price Oracle | Replaceable | BTC/USD price (JSON, NIP-33) |
-| 39102 | Courier Advertisement | Replaceable | Courier capacity and fees (JSON, NIP-33, see DEP-13) |
-| 10301 | Subkey Management | Replaceable | Subkey attestation/revocation list (JSON, see DEP-08) |
-| 25500 | Verify Request | Ephemeral | Wallet-to-verifier request (JSON) |
-| 25501 | Verify Response | Ephemeral | Verifier-to-wallet response (JSON) |
-| 30078 | Wallet State | Replaceable | Encrypted wallet state backup (NIP-78 app data) |
-| 55502 | Domain Attestation | Durable | Lightning address verification attestation (JSON) |
+### Ledger Protocol (operator ↔ wallet, operator ↔ operator)
+
+| Kind | Name | Persistence | Service | Description |
+|---|---|---|---|---|
+| 9100 | Ledger Update | Durable | deposits-node | Signed ledger update (base64 TLV, see DEP-02) |
+| 9101 | Fraud Proof | Durable | deposits-node | Fraud proof broadcast (JSON, see DEP-06) |
+| 9103 | Dispute | Durable | deposits-node | Custody dispute notification (JSON) |
+| 9104 | Recovery Agreement | Durable | deposits-node | Quorum member recovery agreement (JSON) |
+| 9105 | Delivery Escalation | Durable | *reserved* | Wallet escalation of unprocessed request (JSON, see DEP-12) |
+| 20101 | Request | Ephemeral | deposits-node, wallet | Wallet-to-operator request (JSON) |
+| 20102 | Response | Ephemeral | deposits-node | Operator-to-wallet response (JSON) |
+
+### Discovery and Pricing (operator → relay → wallet)
+
+| Kind | Name | Persistence | Service | Description |
+|---|---|---|---|---|
+| 39100 | Advertisement | Replaceable | deposits-node | Operator terms, fees, reserves (JSON, NIP-33, `d`=ledger ID) |
+| 39101 | Price Oracle | Replaceable | deposits-node | BTC/USD price (JSON, NIP-33, `d`=`btcusd`) |
+| 39102 | Courier Advertisement | Replaceable | deposits-node | Cross-ledger routing capacity and fees (JSON, NIP-33, see DEP-13) |
+
+### Identity Verification (wallet ↔ lightning-verifier ↔ operator)
+
+| Kind | Name | Persistence | Service | Description |
+|---|---|---|---|---|
+| 25500 | Verify Request | Ephemeral | wallet | Wallet-to-verifier verification request (JSON) |
+| 25501 | Verify Response | Ephemeral | lightning-verifier | Verifier-to-wallet response: invoice, challenge, or result (JSON) |
+| 55502 | Domain Attestation | Durable | lightning-verifier | Published attestation linking npub to lightning address (JSON) |
+
+### Wallet Infrastructure (wallet → relay → wallet)
+
+| Kind | Name | Persistence | Service | Description |
+|---|---|---|---|---|
+| 10301 | Subkey Management | Replaceable | *reserved* | Subkey attestation/revocation list (JSON) |
+| 30078 | Wallet State | Replaceable | wallet | NIP-04 encrypted state backup to self (NIP-78, `d`=`deposits-wallet/state`) |
 
 ## Event Tags
 
@@ -81,8 +98,6 @@ Wallets send ephemeral Kind 20101 events to operator relays. The content is JSON
 | cosign_invoice | Request co-signature on invoice | DEP-10 |
 | partner_add | Add quorum member | DEP-05 |
 | partner_join | Record quorum join | DEP-05 |
-| collateral_lock | Lock collateral | DEP-05 |
-| collateral_record | Record collateral attestation | DEP-05 |
 | request_route | Request cross-ledger route from courier | DEP-13 |
 
 ### Response Format

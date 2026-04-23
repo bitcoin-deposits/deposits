@@ -27,7 +27,7 @@ A wallet requests withdrawal by providing a destination address, amount, and wit
 1. Appends `OnchainLock` with withdrawal_id, amount, destination, and fee
 2. Constructs and broadcasts the bitcoin transaction
 3. On confirmation: appends `OnchainFulfill` with the txid
-4. On failure: appends `OnchainFail`
+4. On failure: appends `OnchainFail` (releases the locked `amount + miner_fee` and charges the deposit's fixed transfer fee — see DEP-07 §"Fee on Failure")
 
 ## Lightning
 
@@ -52,7 +52,7 @@ A wallet requests payment of a BOLT11 invoice by providing the invoice, deposit 
 1. Appends `InvoiceLock` with payment_hash, amount, payment_id, and deposit witness
 2. Routes the payment through their lightning node
 3. On success: appends `InvoiceFulfill` with the preimage
-4. On failure: appends `InvoiceFail`
+4. On failure: appends `InvoiceFail` (releases the locked `amount` and charges the deposit's fixed transfer fee — see DEP-07 §"Fee on Failure")
 
 ### Self-Pay
 
@@ -82,8 +82,7 @@ Wallets should:
 Creating offers and invoices increases the ledger's potential obligations. The operator must not create offers or invoices that would push total obligations above the least of:
 
 1. The reserves amount (from LedgerOpen/QuorumBegin)
-2. The sum of all attested collateral (`total_collateral` from QuorumBegin)
-3. Twice the smallest quorum member's `collateral_lock_amount`
+2. The collateral amount declared on LedgerOpen/QuorumBegin (`collateral_amount`)
 
 See DEP-05 for details.
 
