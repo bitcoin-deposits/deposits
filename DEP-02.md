@@ -44,28 +44,51 @@ The event content is a base64-encoded TLV stream:
 | 8 | message | variable | Inner operation (TLV-encoded) |
 | 10 | block_height | 4 | Block height at creation |
 | 12 | block_hash | 32 | Block hash at creation |
-| 14 | cosigner_pubkey | 33 | Co-signing quorum member's pubkey |
-| 16 | member_ledger_hash | 32 | Co-signer's ledger tip hash for causal ordering |
-| 18 | cosign_signature | 64 | Schnorr co-signature from quorum member |
+| 14 | cosigner_pubkey | 33 | *Deprecated*. Single co-signer pubkey (pre-majority format). |
+| 16 | member_ledger_hash | 32 | *Deprecated*. Single co-signer's ledger hash (pre-majority format). |
+| 18 | cosign_signature | 64 | *Deprecated*. Single co-signature (pre-majority format). |
 | 20 | operator_signature | 64 | Schnorr signature from operator |
+| 22 | cosignatures | variable | Majority cosignature list (see Cosignatures below) |
 
 `current_hash` is derived by the receiver (see Hash Chain).
 
+### Cosignatures (Tag 22)
+
+Tag 22 contains one or more cosignature entries concatenated as length-prefixed records. Each entry is:
+
+    [u16 BE: entry_length] [entry_length bytes: cosig_entry]
+
+Each `cosig_entry` is:
+
+| Offset | Size | Field |
+|---|---|---|
+| 0 | 33 | cosigner_pubkey (compressed secp256k1) |
+| 33 | 64 | cosign_signature (Schnorr BIP-340) |
+| 97 | 32 | member_ledger_hash (cosigner's ledger tip) |
+
+Total entry size: 129 bytes. Entries MUST be sorted by cosigner_pubkey (lexicographic on serialized bytes). This ensures deterministic hashing. Decoders MUST either reject unsorted input or canonicalize it before verifying `current_hash` and the operator signature — otherwise a malicious sender can reorder entries to produce a distinct but otherwise-valid hash for the same logical cosignature set, enabling signature malleability.
+
+After `QuorumBegin`, updates MUST include at least `floor(n/2) + 1` cosignatures from distinct quorum members (where n is the quorum size). Updates with fewer cosignatures are non-conforming.
+
+For backward compatibility, decoders SHOULD accept the deprecated single-cosig format (tags 14/16/18) from pre-quorum updates and upgrades in progress.
+
 ## Hash Chain
+
+    cosig_data = for each cosig entry (sorted by pubkey):
+        member_ledger_hash || cosign_signature
 
     current_hash = SHA256(
         sequence_number (8 bytes LE)
         || previous_hash (32 bytes)
         || message (variable)
-        [|| member_ledger_hash (32 bytes)]
-        [|| cosign_signature (64 bytes)]
+        || cosig_data (variable, all entries concatenated)
     )
 
     chain_hash = SHA256(current_hash (32 bytes) || operator_signature (64 bytes))
 
-The operator signs the content and co-signature (see Signing). Their signature is folded into `chain_hash`, which becomes the next update's `previous_hash`. Both signatures are committed to the chain without circularity.
+The operator signs the content and all co-signatures (see Signing). Their signature is folded into `chain_hash`, which becomes the next update's `previous_hash`. All signatures are committed to the chain without circularity.
 
-`member_ledger_hash` and `cosign_signature` are included in `current_hash` only when present and non-zero. After `QuorumBegin`, these fields are mandatory on all subsequent updates — omitting them is non-conforming. Before quorum establishment, they are always omitted. The first update (sequence 0) has `previous_hash` = `[0; 32]`.
+After `QuorumBegin`, the cosig entries are mandatory — omitting them is non-conforming. Before quorum establishment, they are always omitted. The first update (sequence 0) has `previous_hash` = `[0; 32]`.
 
 ## Signing
 
@@ -73,20 +96,25 @@ All protocol signatures use Schnorr (BIP-340). On-chain transaction signatures f
 
 ### Co-signing
 
-The quorum member signs a tagged hash over the update content and their ledger's tip:
+Each quorum member independently signs a tagged hash over the update content and their own ledger's tip:
 
     tag = SHA256("deposits/cosign")
     cosign_data = sequence_number (8 LE) || previous_hash || message
     digest = SHA256(tag || tag || cosign_data || member_ledger_hash)
 
-`current_hash` is not signed directly -- it incorporates the co-signature itself, so it cannot be known at signing time.
+`current_hash` is not signed directly — it incorporates the co-signatures themselves, so it cannot be known at signing time.
+
+The operator collects `floor(n/2) + 1` co-signatures before finalizing the update. Each cosigner independently validates the operation against their local state replica and verifies chain continuity from their validated tip before signing.
 
 ### Operator
 
-    operator_signing_data = cosign_data || cosign_signature
+    all_cosig_data = for each cosig entry (sorted by pubkey):
+        cosign_signature (64 bytes)
+
+    operator_signing_data = cosign_data || all_cosig_data
     sig_input = SHA256(operator_signing_data)
 
-The operator signs `SHA256(sequence_number || previous_hash || message || cosign_signature)`. This seals the bilateral agreement — both parties' signatures cover the same content.
+The operator signs after collecting the required majority of co-signatures. This seals the multilateral agreement — the operator's signature covers the content and all co-signatures.
 
 ## Operations
 
@@ -118,8 +146,6 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 70 | TransferLock | Transfers |
 | 71 | TransferComplete | Transfers |
 | 72 | TransferFail | Transfers |
-| 42 | CollateralAttestation | Collateral |
-| 45 | CollateralLock | Collateral |
 | 54 | DisputeEnter | Dispute |
 | 55 | DisputeAcquire | Dispute |
 | 56 | DisputeYield | Dispute |
@@ -142,11 +168,12 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 |---|---|---|---|
 | 56 | operator_id | 33 | LedgerOpen |
 | 58 | reserves_id | variable | LedgerOpen, QuorumBegin, QuorumJoin |
-| 62 | reserves_amount | 8 | LedgerOpen, QuorumBegin |
+| 62 | reserves_amount_msats | 8 | LedgerOpen, QuorumBegin (deposit capacity) |
 | 82 | membership_expires | 4 | QuorumJoin |
 | 84 | new_outpoint_txid | 32 | QuorumBegin |
-| 86 | quorum_expiry | 4 | QuorumBegin (shortest member collateral lock) |
-| 88 | total_collateral | 8 | QuorumBegin (sum of attested collateral, msats) |
+| 86 | quorum_expiry | 4 | QuorumBegin (shortest member membership_until) |
+| 42 | ledger_hash | 32 | QuorumBegin (tip hash committed at rotation) |
+| 88 | collateral_amount_msats | 8 | LedgerOpen, QuorumBegin (security bond) |
 | 90 | spending_txid | 32 | QuorumBegin |
 | 92 | new_outpoint_vout | 4 | QuorumBegin |
 | 96 | genesis_block | 4 | LedgerOpen |
@@ -163,7 +190,6 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 202 | descriptor | variable | DepositOpen (miniscript) |
 | 204 | witness | variable | TransferLock, DepositKeyRotate (nested) |
 | 208 | new_descriptor | variable | DepositKeyRotate |
-| 230 | is_collateral | 1 | DepositOpen |
 | 232 | receive_requires_sig | 1 | DepositOpen |
 
 #### Fees
@@ -212,29 +238,26 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 72 | withdrawal_id | 32 | OnchainLock, OnchainFail, OnchainFulfill |
 | 74 | funding_address | variable | OnchainCredit |
 
-#### Quorum and Collateral
+#### Quorum
 
 | Type | Name | Size | Used by |
 |---|---|---|---|
-| 44 | quorum_member | 33 | QuorumAddMember, QuorumRemoveMember, CollateralAttestation |
-| 38 | collateral_operator | 33 | CollateralAttestation |
-| 40 | signature | 64 | CollateralAttestation |
-| 42 | ledger_hash | 32 | CollateralAttestation |
+| 44 | quorum_member | 33 | QuorumAddMember, QuorumRemoveMember |
 | 46 | quorum_member_sig | 64 | QuorumBegin |
 | 48 | operator_sig | 64 | QuorumBegin |
-| 76 | lock_until_block | 4 | CollateralLock, CollateralAttestation |
 | 114 | member_ledger_id | variable | QuorumAddMember, QuorumJoin |
-| 124 | collateral_ledger_id | variable | CollateralAttestation |
 | 234 | min_fee_bps | 2 | QuorumAddMember |
 | 236 | min_fee_fixed | 8 | QuorumAddMember |
 | 238 | max_fee_period | 4 | QuorumAddMember |
-| 240 | collateral_lock_amount | 8 | QuorumAddMember |
-| 242 | collateral_lock_until | 4 | QuorumAddMember |
+| 242 | membership_until | 4 | QuorumAddMember |
 | 252 | dispute_response_blocks | 4 | QuorumAddMember |
 | 254 | dispute_arm_blocks | 4 | QuorumAddMember |
 | 256 | service_response_blocks | 4 | QuorumAddMember |
 | 258 | max_transfer_timeout_blocks | 4 | QuorumAddMember |
 | 262 | max_descriptor_bytes | 4 | QuorumAddMember |
+| 264 | compensation_bps | 2 | QuorumAddMember |
+| 266 | compensation_deposit_id | 16 | QuorumAddMember |
+| 268 | compensation_frequency_blocks | 4 | QuorumAddMember |
 
 #### Dispute
 
