@@ -88,7 +88,9 @@ For backward compatibility, decoders SHOULD accept the deprecated single-cosig f
 
 The operator signs the content and all co-signatures (see Signing). Their signature is folded into `chain_hash`, which becomes the next update's `previous_hash`. All signatures are committed to the chain without circularity.
 
-After `QuorumBegin`, the cosig entries are mandatory — omitting them is non-conforming. Before quorum establishment, they are always omitted. The first update (sequence 0) has `previous_hash` = `[0; 32]`.
+After `QuorumBegin`, the cosig entries are mandatory — omitting them is non-conforming. Before quorum establishment, cosig entries are omitted on all updates **except the first `QuorumBegin`**, which MUST carry cosignatures from `floor(n/2) + 1` of the members staged via prior `QuorumAddMember` operations (n = `len(next_quorum_members)` at the point the update is applied). Decoders MUST reject a first `QuorumBegin` that lacks this majority. Without the rule, the operator could unilaterally transition to Active with a fabricated member list or a reserves outpoint that doesn't actually exist on-chain. See DEP-05 §QuorumBegin for the full rule and DEP-03 §QuorumBegin for the on-chain verification obligation cosigners must discharge before signing.
+
+The first update (sequence 0) has `previous_hash` = `[0; 32]`.
 
 ## Signing
 
@@ -265,14 +267,14 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 |---|---|---|---|
 | 100 | reason | variable | DisputeEnter |
 | 102 | last_valid_sequence | 8 | DisputeEnter |
-| 116 | entropy_block_height | 4 | DisputeAcquire |
-| 106 | entropy_block_hash | 32 | DisputeAcquire |
 | 108 | new_custodian | 33 | DisputeAcquire |
+| 110 | claim_txid | 32 | DisputeAcquire |
 | 118 | armed_block | 4 | DisputeArmed |
-| 110 | spend_txid | 32 | DisputeAcquire |
 | 120 | new_reserves_address | variable | DisputeAcquire |
 | 112 | commitment_hash | 20 | DisputeArmed (HASH160) |
 | 122 | target_reserves | variable | DisputeArmed |
+
+Field IDs 106 (entropy_block_hash) and 116 (entropy_block_height) were used by an earlier entropy-block-based DisputeAcquire shape and are now retired. Selection moved to an on-chain Tapscript lottery (see DEP-03 §"Custody Lottery"); `claim_txid` records the on-chain spend that proves the script-determined winner.
 
 #### Delivery
 

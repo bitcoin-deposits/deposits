@@ -14,31 +14,25 @@ A wallet publishes a signed request (Kind 20101) to an operator's relay. The ope
 
 The wallet publishes a signed request (Kind 20101) to the operator's advertised relay(s). This is the normal flow defined in DEP-04. Most requests are processed here.
 
-### Step 2: Durable Publication
+### Step 2: Quorum Member Delivery
 
-If the operator does not respond within a wallet-chosen patience window, the wallet re-publishes the request as a durable Nostr event:
+The wallet sends the signed request to one or more quorum members via the standard Kind 20101 request kind defined in DEP-04, addressed to the member's pubkey rather than the operator's. The request body includes:
 
-- **Kind 9105**: Delivery Escalation (durable)
-- **Content**: the original signed request payload
-- **Tags**:
-  - `d`: deposit_id (hex)
-  - `l`: ledger_id (hex)
-  - `p`: operator pubkey
-  - `action`: the request action (e.g., `withdraw`, `transfer_lock`)
+- The original signed request payload (whatever the operator was supposed to process)
+- The wallet's payment commitment for the embedding (per-vbyte price the member advertised)
 
-This event is retained by relays and serves as a public record that the request was made. It is not causally ordered — Nostr event timestamps are not anchored in any chain and cannot be used as proof of timing.
+The member processes the request by:
 
-### Step 3: Quorum Member Delivery
+1. Validating the request signature (proves it came from the deposit's descriptor owner)
+2. Validating the payment commitment (typically a `TransferLock` or off-chain settlement against the wallet's deposit on the member's ledger)
+3. Appending a `DeliveryEmbed` (disc 80) to their own ledger with the request hash
+4. Returning a Kind 20102 response confirming the embed event id and ledger sequence
 
-The wallet sends the signed request to one or more quorum members, requesting paid embedding. The member:
+The `DeliveryEmbed` is a co-signed ledger update on the member's chain — broadcast to relays as a normal Kind 9100 ledger update. At the next co-signature the member provides to the operator's ledger, the member's `member_ledger_hash` will reference a state that includes the embedded request hash. The operator, by co-signing, proves they have seen a state that contains the delivery.
 
-1. Validates the request signature (proves it came from the deposit's descriptor owner)
-2. Appends a `DeliveryEmbed` (disc 80) to their own ledger with the request hash
-3. Charges the wallet for the embedding (priced per vbyte at the member's discretion)
+**Implementation status.** `LedgerOperation::DeliveryEmbed` (disc 80) and the operator/member-side `recovery embed-hash` CLI are wired today. The wallet → member request channel via Kind 20101 is the natural extension of the existing wallet → operator request flow but isn't yet plumbed end-to-end in the wallet code.
 
-The `DeliveryEmbed` is a co-signed ledger update on the member's chain. At the next co-signature the member provides to the operator's ledger, the member's `member_ledger_hash` will reference a state that includes the embedded request hash. The operator, by co-signing, proves they have seen a state that contains the delivery.
-
-### Step 4: Clock Starts
+### Step 3: Clock Starts
 
 The `service_response_blocks` clock begins at the `block_height` of the `DeliveryEmbed` update on the member's ledger. If the operator's ledger advances past `embed_block_height + service_response_blocks` without a corresponding operation, the censorship proof is complete.
 
@@ -74,18 +68,21 @@ The member's embedding fee is the small, guaranteed payoff. The large, contingen
 
 If no quorum member accepts the embedding, the wallet learns that the quorum is unanimously uncooperative — a strong signal to distribute funds elsewhere and publish the evidence to network health monitors.
 
-## Relay Integration
+## Public Record
 
-Kind 9105 events are durable and retained by relays. They serve as a public record but are not part of the censorship proof's evidentiary chain — the causal proof comes entirely from ledger updates. The durable event provides:
+The `DeliveryEmbed` ledger update is itself the durable public record. Once the member appends it to their ledger, the standard Kind 9100 broadcast and relay retention apply — anyone monitoring the member's ledger can observe the escalation. This obviates a separate standalone "escalation notice" event:
 
-- A public signal that the wallet is escalating (reputation pressure on the operator)
-- A record for network health monitors and discovery markets
-- A fallback if the wallet needs to re-request embedding from different members
+- The signed request hash is committed in the embed (with `request_hash`, `target_ledger_id`, `target_operator`)
+- The embed is causally ordered on the member's chain (provable via the member's hash chain)
+- Relays retain it as part of the member's ledger feed
+- The operator's subsequent co-signature on the member's ledger advances `member_ledger_hash` past the embed, locking in causal awareness
+
+For network health monitors and discovery markets, the embed is the canonical event to watch. No additional Nostr kind is needed.
 
 ## Related DEPs
 
 - [DEP-02](DEP-02.md): Wire format (DeliveryEmbed operation fields, causal ordering via member_ledger_hash)
-- [DEP-04](DEP-04.md): Peer messaging (Kind 20101 requests, Kind 9105 durable escalation)
+- [DEP-04](DEP-04.md): Peer messaging (Kind 20101 wallet → operator AND wallet → member requests; DeliveryEmbed rides Kind 9100 as a normal ledger update)
 - [DEP-05](DEP-05.md): Quorum and collateral (service_response_blocks parameter, collateral confiscation)
 - [DEP-06](DEP-06.md): Fraud proofs and recovery (censorship proof construction, dispute initiation)
 - [DEP-08](DEP-08.md): Deposits (descriptor limits enforced at opening)

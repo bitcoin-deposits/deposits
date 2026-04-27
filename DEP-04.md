@@ -23,7 +23,7 @@ Wallets connect to both: operator relays for requests, ledger relays for reading
 | 9101 | Fraud Proof | Durable | deposits-node | Fraud proof broadcast (JSON, see DEP-06) |
 | 9103 | Dispute | Durable | deposits-node | Custody dispute notification (JSON) |
 | 9104 | Recovery Agreement | Durable | deposits-node | Quorum member recovery agreement (JSON) |
-| 9105 | Delivery Escalation | Durable | *reserved* | Wallet escalation of unprocessed request (JSON, see DEP-12) |
+| 9106 | Custody Lottery Reveal | Durable | deposits-node | Disputant's preimage reveal during the on-chain lottery (JSON, see DEP-06 §Phase 3) |
 | 20101 | Request | Ephemeral | deposits-node, wallet | Wallet-to-operator request (JSON) |
 | 20102 | Response | Ephemeral | deposits-node | Operator-to-wallet response (JSON) |
 
@@ -68,10 +68,8 @@ Wallets connect to both: operator relays for requests, ledger relays for reading
 | `n` | Kind 39102 | Network name |
 | `p` | Kind 20101 | Courier pubkey (for courier-addressed requests, see DEP-13) |
 | `p` | Kind 9101 | Accused operator pubkey |
-| `d` | Kind 9105 | Deposit ID (hex) |
-| `l` | Kind 9105 | Ledger ID (hex) |
-| `p` | Kind 9105 | Operator pubkey |
-| `action` | Kind 9105 | Request action name |
+| `l` | Kind 9106 | Ledger ID (hex) — disputed ledger this reveal applies to |
+| `member` | Kind 9106 | Revealing disputant's pubkey (hex) |
 | `d` | Kind 30078 | App namespace (`deposits-wallet/state`). Enables NIP-78 replacement. |
 | `p` | Kind 25500 | Verifier pubkey (hex) |
 | `e` | Kind 25501 | Request event ID (for response matching) |
@@ -115,11 +113,15 @@ Wallets send ephemeral Kind 20101 events to operator relays. The content is JSON
 Operators publish NIP-33 replaceable events advertising their terms. The `d` tag is the ledger_id, ensuring only the latest advertisement per ledger is retained. Content includes:
 
 - Operator name and pubkey
-- Reserves amount, obligations, available headroom
+- Reserves amount (the deposit-capacity portion of the on-chain UTXO)
+- Collateral amount (the security-bond portion; mirrors `collateral_amount_msats` from the ledger's most recent `LedgerOpen` / `QuorumBegin`)
 - Fee schedules (periodic and transfer)
 - Deposit limits (min/max)
+- Access-control flags (whether `deposit_open` requires an attestation; allowed lightning-address domains)
 - Relay URL
-- Collateral enforcement block
+- Operator's observed Bitcoin chain tip at publish time
+
+Earlier drafts also carried `total_obligations` and `available_headroom`. Both were dropped — the operator can trivially inflate them with self-paid Lightning invoices, so they're not reliable trust signals. Wallets that need capacity information should either discover a courier already holding funds on this ledger, or trust the protocol invariant `reserves ≥ obligations` enforced by the quorum's co-signers.
 
 Wallets discover operators by fetching Kind 39100 events from ledger relays.
 
@@ -212,7 +214,7 @@ Wallets need no persistent connections. They can go offline indefinitely and cat
 
 - [DEP-02](DEP-02.md): Ledger update wire format (Kind 9100 content)
 - [DEP-06](DEP-06.md): Fraud proof broadcast format (Kind 9101 content)
-- [DEP-12](DEP-12.md): Certified delivery (Kind 9105 durable escalation)
+- [DEP-12](DEP-12.md): Certified delivery (Kind 20101 wallet → member request, durable record via DeliveryEmbed on Kind 9100)
 
 ## References
 
