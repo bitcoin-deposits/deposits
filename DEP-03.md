@@ -44,6 +44,7 @@ When a quorum is established or refreshed, the operator constructs a new Taproot
 - **new_outpoint_txid**: the txid of the new reserves output
 - **new_outpoint_vout**: the vout index
 - **quorum_members**: the pubkeys included in the new multisig. MUST match the set of members staged via prior `QuorumAddMember` operations (and not since removed by `QuorumRemoveMember`) — `QuorumBegin` promotes exactly that staged set to the new active quorum (see DEP-05 §QuorumBegin).
+- **quorum_member_ledger_ids** parallel array to `quorum_members` carrying each member's own ledger_id (the ledger holding their collateral, sourced from the matching `QuorumAddMember.member_ledger_id`). Lets fraud-proof verifiers and explorers identify the ledger backing each cosigner's `member_ledger_hash` without re-deriving the mapping from prior `QuorumAddMember` history. Older `QuorumBegin` events omit this field; consumers fall back to walking `QuorumAddMember` operations on the operator's ledger.
 - **quorum_expiry**: block height when the quorum expires (shortest member commitment)
 
 The on-chain UTXO value MUST equal `reserves_amount + collateral_amount`. Cosigners MUST verify, against their own chain source, that the referenced outpoint (`new_outpoint_txid`, `new_outpoint_vout`):
@@ -104,24 +105,64 @@ For recovery leaves: standard tapscript multisig — `K` of `N` signature slots 
 
 ### Pre-release policy cap
 
-The script supports up to N=15 disputants. The current policy in this release is `MAX_QUORUM_SIZE_POLICY = 8` (operator + cosigners), enforced at `QuorumBegin` validation — so disputes can have at most 7 disputants. Lifting this cap is a one-line constant change with no script or wire-format implications. See `CUSTODY_LOTTERY.md` for full design rationale.
+The script supports up to N=15 disputants. The current policy in this release is `VALID_QUORUM_SIZES = {3, 5, 7}` with `MAX_QUORUM_SIZE_POLICY = 7`, enforced at `QuorumBegin` validation. `Q` is the cosigner count and excludes the operator; disputants equal `Q` exactly (every cosigner can dispute, the operator is barred from disputing their own ledger). Lifting the cap or extending the allowed set is a one-line constant change with no script or wire-format implications. See `CUSTODY_LOTTERY.md` for full design rationale.
 
-### Respectful Custody
+### Fraud-proof classification: Respectful vs Punitive
 
-When a ledger becomes unavailable (not provably dishonest), the custody transfer is respectful:
+Every dispute is initiated by a fraud proof — quorum members don't dispute on
+"vibes." The proof's *type* determines whether the dispute is respectful or
+punitive, which in turn shapes both the confiscation tx and cross-ledger
+propagation:
 
-- Only the amount required to cover obligations is sent to the lottery winner
-- Change is sent back to the original operator's pubkey
-- Collateral control is unaffected
+| Fraud proof type      | Class       | Trigger condition                                                                  |
+|-----------------------|-------------|------------------------------------------------------------------------------------|
+| `QuorumExpired`       | Respectful  | Operator failed to rotate before `quorum_expiry`                                   |
+| `UncreditedOnchainPayment` | Punitive   | Operator received on-chain payment, didn't credit despite signing past confs       |
+| `UncreditedLightningPayment` | Punitive | Operator received Lightning payment, didn't credit despite preimage release        |
+| `StaleCosignature`    | Punitive    | Cosigner backdated their `member_ledger_hash` (signed against an outdated state)   |
+| `DisputeDereliction`  | Punitive    | Cosigner was online but failed to act on a prior fraud proof within the window     |
+| `NonConformingUpdate` | Punitive    | Operator signed a ledger update that violates protocol rules                       |
 
-### Non-conformance
+### Respectful custody (QuorumExpired only)
 
-When proof of non-conformance is provided:
+When the operator fails to rotate before `quorum_expiry`, the custody transfer
+is *respectful*:
 
-- The full UTXO (reserves + collateral) goes to the lottery
-- The lottery winner takes over the ledger and inherits deposit obligations
-- The collateral portion is forfeited by the operator — the winner retains it as compensation
-- Excess reserves (above obligations) are split equally among quorum members
+- The fraud proof is `QuorumExpired`. Evidence is just an anchor block hash
+  whose height in the verifier's chain exceeds the ledger's `quorum_expiry`.
+- Cosigners enforce the deadline at the cosign edge: past `quorum_expiry`,
+  they refuse to cosign *any* operation, including a fresh `QuorumBegin`.
+  The operator must rotate *before* the deadline; missing it is fatal to the
+  current quorum.
+- Confiscation tx is bifurcated:
+  - `obligations` worth of reserves → lottery winner
+  - `(reserves − obligations) + full collateral` → operator's pubkey (change)
+- The fraud proof does **not** propagate cross-ledger. Other ledgers the
+  operator runs are unaffected.
+
+### Punitive custody (proven non-conformance)
+
+When proof of provable misbehaviour is presented:
+
+- The full UTXO (reserves + collateral) goes to the confiscation tx.
+  - `obligations` worth of reserves → lottery winner (becomes the new
+    backing for inherited deposits).
+  - The remainder, `(reserves − obligations) + collateral`, is split equally
+    among the `Q` cosigners. **The lottery winner does not retain the
+    confiscated collateral as a windfall** — they receive their per-cosigner
+    share alongside everyone else, evenly aligning incentives across the
+    quorum.
+- The lottery winner takes over the ledger, inheriting deposit obligations
+  and the lottery output.
+- **The winner provides replacement collateral** as a fresh input when
+  claiming the lottery output. The replacement amount + the inherited
+  `obligations` reserves form the new operating UTXO. Operating a ledger
+  is a service commitment, not a windfall; the winner pays the cost of
+  fresh collateral to take the role.
+- The same fraud proof can be presented to the operator's *other* quorums,
+  triggering punitive disputes there as well. Cross-ledger contagion is
+  the protocol's mechanism for ensuring an operator with multiple ledgers
+  can't insulate one from misbehaviour on another.
 
 ## Related DEPs
 
