@@ -1,0 +1,74 @@
+[package]
+name = "deposits-nostr"
+version = "0.1.0"
+edition = "2021"
+description = "Nostr transport for the Bitcoin Deposits protocol — wire constants, message types, and a thin async client used by both the daemon and the wallet"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/anthropics/deposits-rust"
+
+[features]
+# `signer` enables the `Signer`-using methods on `NostrTransport` — the
+# daemon needs them to sign Kind 39100 advertisements as the operator
+# key (when the inbox key is a delegate) and to perform the NIP-04
+# fallback decrypt against the operator key. Wallets never touch this
+# surface; they construct `NostrTransport` from a raw `SecretKey` and
+# sign their own Nostr events directly. Default-on so the daemon is
+# unaffected; wallet-only consumers pass `default-features = false`.
+default = ["signer"]
+signer = ["dep:deposits-signer-api"]
+
+[dependencies]
+# Wire types + TLV codec. We pull from `deposits-protocol` directly
+# rather than the umbrella `deposits-core` re-exports — protocol owns
+# the actual definitions of `SignedLedgerUpdate`, `DepositsMessage`,
+# and the `Tlv{Encode,Decode}` traits, while core layers the state
+# machine, validators, miniscript handling, etc. on top. The transport
+# only needs the wire surface, so depending on the wire crate keeps
+# the deposits-nostr dep cone tight.
+deposits-protocol = { path = "../deposits-protocol" }
+# Signer trait — used by NostrTransport's operator-side methods. See
+# the `signer` feature above.
+deposits-signer-api = { path = "../deposits-signer-api", optional = true }
+
+# Bitcoin primitives (PublicKey/SecretKey for NIP-04 keying)
+bitcoin = { version = "0.32", features = ["serde"] }
+
+# Nostr SDK — the actual relay/transport stack.
+nostr-sdk = { version = "0.37", features = ["nip44", "nip47", "nip59"] }
+
+# rustls + ring crypto provider. nostr-sdk pulls these transitively
+# but rustls 0.23+ requires an explicit `install_default()` before
+# the first TLS handshake; we expose `install_default_crypto_provider()`
+# so every binary that uses NostrTransport over wss:// can wire it
+# up in one call from `main()`.
+rustls = { version = "0.23", features = ["ring"] }
+
+# Encoding
+base64 = "0.21"
+hex = "0.4"
+
+# Manual NIP-04 decrypt path (operator/delegate dual-decrypt fallback)
+aes = "0.8"
+cbc = "0.1"
+sha2 = "0.10"
+
+# Async + sync primitives
+tokio = { version = "1", features = ["sync", "macros", "time", "rt"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+
+# Optional Prometheus metrics — no-op when no recorder is registered, so
+# pure-wallet consumers pay nothing. The daemon registers a recorder via
+# `metrics-exporter-prometheus` and gets the data populated automatically.
+metrics = "0.24"
+
+[lints]
+workspace = true

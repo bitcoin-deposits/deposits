@@ -1,0 +1,62 @@
+[package]
+name = "deposits-wallet"
+version = "0.1.0"
+edition = "2021"
+description = "Bitcoin Deposits Protocol - Wallet CLI"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# Core protocol logic + state machine
+deposits-core = { path = "../deposits-core" }
+# Nostr transport, message types, wire constants. Lifted out of
+# `deposits-node` so the wallet is no longer coupled to the daemon's
+# library at compile time.
+deposits-nostr = { path = "../deposits-nostr", default-features = false }
+# `ringsig-link` used to live as a wallet subcommand; it now ships as
+# the standalone `deposits-ringsig` binary so the wallet's compile
+# tree doesn't carry the ring-signature primitives.
+
+# Bitcoin
+bitcoin = { version = "0.32", features = ["serde"] }
+
+# Nostr for peer messaging
+nostr-sdk = { version = "0.37", features = ["nip44", "nip47", "nip59"] }
+
+# TLS crypto provider: deposits-nostr re-exports `ring` via the
+# `install_default_crypto_provider()` helper called from `main()`.
+# rustls 0.23+ requires that to happen before the first TLS handshake;
+# without it, the first wss:// connection panics.
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# CLI utilities
+dirs = "5.0"
+
+# Utilities
+hex = "0.4"
+base64 = "0.22"
+chrono = "0.4"
+sha2 = "0.10"
+
+# Lightning invoice parsing (used by pay_invoice)
+lightning-invoice = "0.32"
+
+# HTTP client (verifier round-trip for access-controlled deposits)
+reqwest = { version = "0.12", features = ["json", "blocking", "rustls-tls"], default-features = false }
+
+# Memory allocator — jemalloc reduces fragmentation under sustained
+# alloc/dealloc workloads, particularly the swap-listen / batch modes.
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.6"
+
+[lints]
+workspace = true
