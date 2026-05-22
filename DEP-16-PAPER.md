@@ -35,7 +35,8 @@ The distinction between leaves of `B` introduced via `prove` and leaves of `B` d
 ### 2.2 Syntax
 
 ```
-B ::=  and(B, ..., B)
+B ::=  <bool>                     -- boolean literal
+    |  and(B, ..., B)
     |  or(B, ..., B)
     |  thresh(k, B, ..., B)
     |  not(B)
@@ -100,7 +101,7 @@ Say a term is *m-constant* iff its evaluation under `(w, s, m)` depends only on 
 
 **Lemma.** *In a well-formed term, every B-subterm not in positive position is m-constant.*
 
-*Proof.* By the polarity rule, no `prove` leaf appears in a non-positive B-position. The remaining B-leaves (`state`, `cmp`) and all V-terms are m-constant. The B-connectives are total functions of their arguments, and total functions of m-constants are m-constant. By induction on terms, any B-subterm reachable from the root through only non-positive contexts contains only m-constant leaves and is itself m-constant. ∎
+*Proof.* By the polarity rule, no `prove` leaf appears in a non-positive B-position. The remaining B-leaves (boolean literals, `state`, `cmp`) and all V-terms are m-constant. The B-connectives are total functions of their arguments, and total functions of m-constants are m-constant. By induction on terms, any B-subterm reachable from the root through only non-positive contexts contains only m-constant leaves and is itself m-constant. ∎
 
 **Theorem (witness-monotonicity).** *For every well-formed term T, every operation w, every state s, and witnesses m <= m', if `[[ T ]] (w, s, m) = true` then `[[ T ]] (w, s, m') = true`.*
 
@@ -111,7 +112,7 @@ Say a term is *m-constant* iff its evaluation under `(w, s, m)` depends only on 
 - `if(B_c, B_t, B_e)`: by the lemma, `B_c` is m-constant, so the same branch is selected under `m` and `m'`; apply the inductive hypothesis to the selected branch.
 - `match(V_s, ...)`: the scrutinee `V_s` is sort V hence m-constant, so the same branch is selected; apply the inductive hypothesis to the selected branch body.
 - `prove(o)`: if `m` discharges `o`, the discharging entry is present in `m'` by `m <= m'`, so `m'` also discharges.
-- `state(...)`, `cmp(...)`, V-positions: m-constant by construction. ∎
+- Boolean literals, `state(...)`, `cmp(...)`, V-positions: m-constant by construction. ∎
 
 Witness-monotonicity is the security property the calculus is engineered to guarantee. A party that holds a key cannot fabricate authority by pretending not to hold it: no well-formed term has a branch gated on key-absence, so no branch is unlocked by withholding.
 

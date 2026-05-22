@@ -4,13 +4,13 @@
 
 deposit authorization is generalized from spending-only miniscript to a small term calculus in which every deposit operation — spending, modification of the authorization term, accepting incoming payments, updating metadata — is authorized by evaluating a closed term against the operation, a ledger-state snapshot, and a witness. existing miniscript syntax is preserved as a sublanguage with unchanged semantics. extensions add ledger-state predicates, operation introspection, structural inspection of the term itself, and operation-level signatures. one language, one evaluator, one admission discipline, one fraud-proof shape.
 
-formal semantics, the monotonicity theorem, and the modification invariant are in DEP-16-PAPER.md. this dep specifies the implementation: concrete grammar, operation encodings, witness format, admission checks, evaluation algorithm, cost model, fraud proofs, capability declarations, and integration with existing deps.
+formal semantics, the monotonicity theorem, and the modification invariant are in calculus.md. this dep specifies the implementation: concrete grammar, operation encodings, witness format, admission checks, evaluation algorithm, cost model, fraud proofs, capability declarations, and integration with existing deps.
 
 ## background
 
 deposits are currently locked by miniscript expressions evaluated against spending witnesses. operations beyond spending — rotating a key, accepting a payment under conditions, repairing a descriptor, transferring authority to recovery guardians — have had no native expression. encoding them as spends adds vestigial semantics; carrying a separate authorization sublanguage per operation multiplies fraud-proof variants and admission rules.
 
-this dep takes a third path. the descriptor language is extended with combinators that introspect the operation, the ledger state, and the term itself; modification is an operation under the same authorization regime; everything is verified by one evaluator. the formal properties relied on — witness-monotonicity under a static polarity rule, total deterministic evaluation, system-level well-formedness across modifications — are proved in DEP-16-PAPER.md.
+this dep takes a third path. the descriptor language is extended with combinators that introspect the operation, the ledger state, and the term itself; modification is an operation under the same authorization regime; everything is verified by one evaluator. the formal properties relied on — witness-monotonicity under a static polarity rule, total deterministic evaluation, system-level well-formedness across modifications — are proved in calculus.md.
 
 ## descriptor structure
 
@@ -26,7 +26,8 @@ names in `with(...)` are bound once at deposit-open and resolved by name in the 
 the expression language has three sorts: `B` for booleans (the sort of authorization decisions and of the descriptor body), `V` for values (integers, public keys, hashes, paths, subterms-as-data, operation arguments), and `O` for proof obligations, injected into `B` via the coercion `prove(O) : B`.
 
 ```
-B ::=  and(B, B, ...)
+B ::=  <bool>                      true or false
+    |  and(B, B, ...)
     |  or(B, B, ...)
     |  thresh(k, B, B, ...)
     |  not(B)
@@ -36,7 +37,7 @@ B ::=  and(B, B, ...)
     |  state(<predicate>, V, ..., V)
     |  prove(O)
 
-V ::=  <literal>                   integers, keys, hashes, deposit ids, symbols
+V ::=  <literal>                   integers, keys, hashes, bytes, symbols
     |  [V, V, ...]                 list
     |  <varref>                    resolved against the with(...) environment
     |  <op>(V, ..., V)             from the value function signature
@@ -50,7 +51,7 @@ O ::=  pk(V)
 
 every `match` must include an `else` branch. this is grammatical, not a runtime check; the parser rejects `match` without `else`.
 
-value literals include integers, public keys, hashes, deposit ids, and symbols. symbols are atomic identifiers used as operation-type tags (`spend`, `insert`, `replace`, `delete`, `accept`, `update_metadata`), branch tags in `match`, and schema kinds. paths are constructed by the `path(...)` value function rather than written as literals. lists are written `[v, v, ...]` and are used wherever a collection of values of the same kind is needed; predicates that take lists treat them as sets (order does not matter, and duplicates are folded for purposes like `pk_threshold`'s distinct-key requirement).
+value literals include integers, public keys, hashes, byte strings, and symbols. byte strings are used for opaque payloads such as the `completion_script` argument of a spend operation. symbols are atomic identifiers used as operation-type tags (`spend`, `insert`, `replace`, `delete`, `accept`, `update_metadata`), branch tags in `match`, and schema kinds. paths are constructed by the `path(...)` value function rather than written as literals. deposit ids and destinations are not a distinct literal kind — they are 32-byte identifiers carried as hashes. lists are written `[v, v, ...]` and are used wherever a collection of values of the same kind is needed; predicates that take lists treat them as sets (order does not matter, and duplicates are folded for purposes like `pk_threshold`'s distinct-key requirement).
 
 existing miniscript fragments are accepted as parse-time aliases and desugar to the n-ary `and`, `or`, `thresh` above; the wrappers (`a:`, `s:`, `c:`, `v:`, `t:`, `d:`, `j:`, `n:`, `l:`, `u:`) desugar to no-ops. the miniscript combinators `pk`, `older`, `after`, `sha256`, `hash256`, `ripemd160`, `hash160` retain their meaning; their semantic content in the calculus is `prove(pk(...))`, `prove(hashlock(...))`, `state(older, ...)`, `state(after, ...)`. miniscript's `pk_h` is not provided — the witness is keyed by key, not by hash-of-key, so the hash-then-reveal discharge pattern does not fit. wallets that want a hash-protected reference should use `hashlock` directly.
 
@@ -104,7 +105,7 @@ every action against a deposit is an operation. each has a canonical encoding un
 
 v1 operation types: `spend` carries `destination`, `amount`, `completion_script`, `timeout`, `fee`. `accept` carries `source`, `amount`, `conditions`. `insert` carries `path`, `subtree`. `replace` carries `path`, `subtree`. `delete` carries `path`. `update_metadata` carries `field`, `new_value`.
 
-the canonical encoding for each operation type is specified in dep-16.
+the canonical encoding for each operation type is specified in dep-17.
 
 ## evaluation
 
@@ -136,7 +137,7 @@ a descriptor is admitted at deposit-open and re-admitted as part of every modifi
 
 **polarity.** every occurrence of `prove(o)` must be in positive position. positive position is defined inductively: the root is positive; a `B`-subterm directly under `and`, `or`, `thresh`, or in a branch body of `if(_, B, B)` or `match(_, branch(_, B), ...)` inherits the polarity of its enclosing context; a `B`-subterm under `not(_)` or in the condition slot of `if(B, _, _)` is non-positive. `V`-positions cannot contain `prove(o)` by sort discipline and need not be checked.
 
-the polarity check rejects `prove` under `not` absolutely, not relative to parity. parity-flipping (under which `not(not(prove(o)))` would be admitted) would break the m-constancy invariant the witness-monotonicity proof depends on; acceptance of double-negated proof obligations is structurally lost, with no practical cost. see DEP-16-PAPER.md §2.4 for the justification.
+the polarity check rejects `prove` under `not` absolutely, not relative to parity. parity-flipping (under which `not(not(prove(o)))` would be admitted) would break the m-constancy invariant the witness-monotonicity proof depends on; acceptance of double-negated proof obligations is structurally lost, with no practical cost. see calculus.md §2.4 for the justification.
 
 **capability.** every combinator, value function, state predicate, proof-obligation form, and operation type used in the descriptor must appear in the operator's advertised capability set.
 
@@ -148,7 +149,7 @@ operators may impose additional operational limits — maximum descriptor size, 
 
 modification operations (`insert`, `replace`, `delete`) target ast paths and produce a candidate `T'` from the current descriptor `T` and the operation's arguments. the operator computes `T'`, runs admission against it, and binds the deposit to `T'` only if both checks pass. a candidate that fails either is rejected — the modification operation as a whole is rejected, even though `T` authorized the underlying request.
 
-this preserves the system invariant inductively. deposit-open establishes admission; each modification preserves it by re-check. modifications may expand, narrow, or rearrange authority — the calculus does not constrain the relationship between `T` and `T'` beyond well-formedness. this is deliberate: recovery use cases require expansion (a quorum of guardians installing a new principal key), and a narrowing-only discipline would foreclose them. see DEP-16-PAPER.md §3.4.
+this preserves the system invariant inductively. deposit-open establishes admission; each modification preserves it by re-check. modifications may expand, narrow, or rearrange authority — the calculus does not constrain the relationship between `T` and `T'` beyond well-formedness. this is deliberate: recovery use cases require expansion (a quorum of guardians installing a new principal key), and a narrowing-only discipline would foreclose them. see calculus.md §3.4.
 
 paths in v1 are positional. a modification produces a new descriptor in which subtrees may have shifted to new positional addresses. descriptors whose guards depend on stable cross-modification references should encode the relevant structure into operation argument shape rather than positional paths; named-slot extensions are deferred to a future dep.
 
@@ -162,7 +163,7 @@ every operation produces a fraud-proof input of the shape
 
 where `T` is the descriptor in effect at time `t`, `w` is the operation, `s_t` is the ledger-state snapshot at `t`, `m` is the witness, `verdict` is the operator's accept/reject, and `ledger_update` is what the operator wrote to the ledger. a verifier replays `eval(T, w, s_t, m)`, compares to `verdict`, and checks that the ledger update is consistent with the verdict. mismatch on either is a provable operator fault.
 
-determinism of replay holds given protocol-fixed canonical encodings of operations, state snapshots, and descriptors. the encodings are specified in dep-16.
+determinism of replay holds given protocol-fixed canonical encodings of operations, state snapshots, and descriptors. the encodings are specified in dep-17.
 
 this fraud-proof shape covers all operation types. there is no per-operation variant — `spend`, modification, `accept`, and `update_metadata` all reduce to the same shape. per-operation variants previously planned are replaced by this.
 
@@ -182,7 +183,7 @@ the capability mechanism is the protocol's primary lever for evolving the langua
 
 three encodings are fixed at the protocol level and required for cross-implementation determinism. the operation encoding determines what signatures over operations commit to and is what fraud-proof replay verifies signatures against. the state-snapshot encoding determines what state predicates read and what fraud-proof replay reproduces. the descriptor encoding determines what `ast_ref`, `subtree_at`, and structural comparisons compute against, and what the descriptor commits to when its root hash is recorded.
 
-all three are specified in dep-16. implementations that do not honor them produce divergent fraud proofs and cannot participate in the protocol.
+all three are specified in dep-17. implementations that do not honor them produce divergent fraud proofs and cannot participate in the protocol.
 
 ## error semantics
 
@@ -205,7 +206,7 @@ this dep modifies or supersedes parts of:
 
 it depends on:
 
-- **dep-16 (canonical encodings):** operations, state snapshots, and descriptors.
+- **dep-17 (canonical encodings):** operations, state snapshots, and descriptors.
 - **dep-N (state commitments):** operator commitments to ledger state, against which fraud proofs verify.
 
 it does not affect:
@@ -315,5 +316,5 @@ several details are deferred to subsequent deps or to v2:
 
 - **named slots for stable cross-modification references.** v1 uses positional paths.
 - **predicate vocabulary.** the set in this dep is a starting point; the protocol-fixed set will grow or contract empirically as wallets and operators converge on common templates.
-- **descriptor canonicalization.** dep-16 will fix the exact canonical encoding; the boundary between protocol-fixed and implementation-chosen encoding details may need refinement.
+- **descriptor canonicalization.** dep-17 fixes the exact canonical encoding; the boundary between protocol-fixed and implementation-chosen encoding details may need refinement.
 - **migration of capability sets.** what happens to deposits using a primitive an operator subsequently drops is sketched above (close, migrate, wait) but not specified in detail.
