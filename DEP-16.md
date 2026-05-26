@@ -14,12 +14,23 @@ this dep takes a third path. the descriptor language is extended with combinator
 
 ## descriptor structure
 
-a descriptor is a closed term with a top-level constant environment.
+a descriptor is a closed term with a top-level constant environment, wrapped in a scheme tag that selects the commitment shape and authorization paths above the body.
 
 ```
-descriptor ::= with(name = literal, ..., in expression)
+descriptor ::= wsh(body)
+            |  tr(K)
+            |  tr(K, body)
+            |  body                          -- sugar for wsh(body)
+
+body       ::= with(name = literal, ..., in expression)
             |  expression
 ```
+
+`wsh(body)` is the default scheme: authorization is whatever the body evaluates to. `tr(K)` authorizes any operation by a signature under the internal key `K` and has no body to consult — it is the calculus's pk(K) at the top level. `tr(K, body)` is semantically `or(prove(pk(K)), body)`: either a signature by `K` or any path through `body` authorizes. the scheme tag is part of the descriptor commitment specified in dep-17, so a `wsh(BODY)` and a `tr(K, BODY)` over the same body are distinct descriptors with distinct commitments; the scheme also distinguishes which encoding rules dep-17 applies. bare body without an explicit wrapper is sugar for `wsh(body)` and provided so existing source compiles unchanged.
+
+the choice of scheme is a security decision distinct from the body's contents. `tr`'s internal key holds an unconditional authorization path over every operation, including modifications, and its custody discipline must match. this mirrors bitcoin p2tr.
+
+ast paths address positions in the *descriptor*, with the scheme wrapper as the root. `wsh(body)` has one child — the body root — at path `[0]`; deeper positions in the body extend the path (`[0, i]` is the body's i-th child, and so on). `tr(K)` has one child — the internal key — at path `[0]`. `tr(K, body)` has two: the internal key at `[0]` and the body root at `[1]`. the path origin is uniform across schemes, so every modifiable position — including the internal key of a `tr` descriptor — is reachable by a path of the same shape.
 
 names in `with(...)` are bound once at deposit-open and resolved by name in the body. names that do not resolve cause admission to fail.
 
@@ -109,23 +120,31 @@ the canonical encoding for each operation type is specified in dep-17.
 
 ## evaluation
 
-evaluation takes `(T, w, s, m)` and produces accept or reject. the structural definition:
+evaluation takes `(D, w, s, m)` and produces accept or reject. it first dispatches on the descriptor's scheme, then folds the body. the structural definition:
 
 ```
-eval(T, w, s, m) =
+eval(D, w, s, m) =
+  case D of
+    wsh(body)             -> eval_b(body, w, s, m)
+    tr(K)                 -> verify(pk(K), m, w, s)
+    tr(K, body)           -> verify(pk(K), m, w, s) || eval_b(body, w, s, m)
+
+eval_b(T, w, s, m) =
   case T of
-    and(b1, ..., bn)      -> all (\b -> eval(b, w, s, m)) [b1, ..., bn]
-    or(b1, ..., bn)       -> any (\b -> eval(b, w, s, m)) [b1, ..., bn]
-    thresh(k, b1, ..., bn)-> count (\b -> eval(b, w, s, m)) [...] >= k
-    not(b)                -> not eval(b, w, s, m)
-    if(c, t, e)           -> if eval(c, w, s, m) then eval(t, w, s, m)
-                                                  else eval(e, w, s, m)
-    match(v, branches)    -> eval(select_branch(eval_v(v, w, s), branches),
-                                  w, s, m)
+    and(b1, ..., bn)      -> all (\b -> eval_b(b, w, s, m)) [b1, ..., bn]
+    or(b1, ..., bn)       -> any (\b -> eval_b(b, w, s, m)) [b1, ..., bn]
+    thresh(k, b1, ..., bn)-> count (\b -> eval_b(b, w, s, m)) [...] >= k
+    not(b)                -> not eval_b(b, w, s, m)
+    if(c, t, e)           -> if eval_b(c, w, s, m) then eval_b(t, w, s, m)
+                                                    else eval_b(e, w, s, m)
+    match(v, branches)    -> eval_b(select_branch(eval_v(v, w, s), branches),
+                                    w, s, m)
     cmp(op, a, b)         -> op(eval_v(a, w, s), eval_v(b, w, s))
     state(p, vs)          -> p(eval_v(vs, w, s)..., w, s)
     prove(o)              -> verify(o, m, w, s)
 ```
+
+implementations may evaluate `tr(K, body)` by trying the key-path before reifying the body; the verdict is unchanged because `or` is symmetric and `verify(pk(K), …)` is m-monotone like every other proof obligation.
 
 `select_branch` returns the branch whose tag equals the scrutinee, falling through to the `else` branch if none matches.
 
@@ -135,7 +154,7 @@ evaluation is strict, total, and structural. there is no recursion, iteration, s
 
 a descriptor is admitted at deposit-open and re-admitted as part of every modification operation that produces a new descriptor. admission runs two checks; failure of either rejects the candidate. both are syntactic, depend on no operation or witness or state, and run in time linear in the descriptor.
 
-**polarity.** every occurrence of `prove(o)` must be in positive position. positive position is defined inductively: the root is positive; a `B`-subterm directly under `and`, `or`, `thresh`, or in a branch body of `if(_, B, B)` or `match(_, branch(_, B), ...)` inherits the polarity of its enclosing context; a `B`-subterm under `not(_)` or in the condition slot of `if(B, _, _)` is non-positive. `V`-positions cannot contain `prove(o)` by sort discipline and need not be checked.
+**polarity.** every occurrence of `prove(o)` in the body must be in positive position. positive position is defined inductively: the body's root is positive; a `B`-subterm directly under `and`, `or`, `thresh`, or in a branch body of `if(_, B, B)` or `match(_, branch(_, B), ...)` inherits the polarity of its enclosing context; a `B`-subterm under `not(_)` or in the condition slot of `if(B, _, _)` is non-positive. `V`-positions cannot contain `prove(o)` by sort discipline and need not be checked. the scheme wrapper contributes no proof obligations of its own — `tr(K, body)` is `or(prove(pk(K)), body)` semantically, and the synthesized `prove(pk(K))` arm is in positive position by construction — so polarity is a single check on the body regardless of scheme.
 
 the polarity check rejects `prove` under `not` absolutely, not relative to parity. parity-flipping (under which `not(not(prove(o)))` would be admitted) would break the m-constancy invariant the witness-monotonicity proof depends on; acceptance of double-negated proof obligations is structurally lost, with no practical cost. see calculus.md §2.4 for the justification.
 
@@ -147,9 +166,11 @@ operators may impose additional operational limits — maximum descriptor size, 
 
 ## modification
 
-modification operations (`insert`, `replace`, `delete`) target ast paths and produce a candidate `T'` from the current descriptor `T` and the operation's arguments. the operator computes `T'`, runs admission against it, and binds the deposit to `T'` only if both checks pass. a candidate that fails either is rejected — the modification operation as a whole is rejected, even though `T` authorized the underlying request.
+modification operations (`insert`, `replace`, `delete`) target ast paths into the descriptor and produce a candidate descriptor `D'` from the current descriptor `D` and the operation's arguments. the operator computes `D'`, runs admission against it, and binds the deposit to `D'` only if both checks pass. a candidate that fails either is rejected — the modification operation as a whole is rejected, even though `D` authorized the underlying request.
 
-this preserves the system invariant inductively. deposit-open establishes admission; each modification preserves it by re-check. modifications may expand, narrow, or rearrange authority — the calculus does not constrain the relationship between `T` and `T'` beyond well-formedness. this is deliberate: recovery use cases require expansion (a quorum of guardians installing a new principal key), and a narrowing-only discipline would foreclose them. see calculus.md §3.4.
+paths are rooted at the descriptor (see §descriptor structure), so every modifiable position is in the path space. for `wsh(body)`, all modifiable positions live under `[0, …]` (inside the body). for `tr(K, body)`, the internal key is at `[0]` and the body's positions are under `[1, …]`. internal-key rotation is therefore a `replace` operation at path `[0]` of a `tr` descriptor, authorized by whatever the descriptor's current authorization paths admit — typically the existing K signing — and subject to admission like any other modification. the scheme tag itself is the descriptor's root identity and is not addressable by any path; a modification cannot rewrite a `wsh` descriptor into a `tr` descriptor or vice versa. modifications against `tr(K)` (no body) accept path `[0]` to rotate the internal key and reject any other path with no addressable position.
+
+this preserves the system invariant inductively. deposit-open establishes admission; each modification preserves it by re-check. modifications may expand, narrow, or rearrange authority — the calculus does not constrain the relationship between `D` and `D'` beyond well-formedness. this is deliberate: recovery use cases require expansion (a quorum of guardians installing a new principal key), and a narrowing-only discipline would foreclose them. see calculus.md §3.4.
 
 paths in v1 are positional. a modification produces a new descriptor in which subtrees may have shifted to new positional addresses. descriptors whose guards depend on stable cross-modification references should encode the relevant structure into operation argument shape rather than positional paths; named-slot extensions are deferred to a future dep.
 
@@ -169,11 +190,11 @@ this fraud-proof shape covers all operation types. there is no per-operation var
 
 ## capability declarations
 
-an operator declares its capability set in metadata accessible to wallets at deposit-open. the set lists supported value functions, supported state predicates, supported operation types, and supported proof-obligation forms. for proof-obligation forms parameterized by hash type or schema kind, the granularity is per type: an operator may declare `hashlock` for sha256 without declaring it for ripemd160, and may declare `attest` with one schema kind without declaring it with another.
+an operator declares its capability set in metadata accessible to wallets at deposit-open. the set lists supported value functions, supported state predicates, supported operation types, supported proof-obligation forms, and supported scheme tags. for proof-obligation forms parameterized by hash type or schema kind, the granularity is per type: an operator may declare `hashlock` for sha256 without declaring it for ripemd160, and may declare `attest` with one schema kind without declaring it with another. for schemes the granularity is per tag: an operator may declare `wsh` without declaring `tr`, e.g., to defer Schnorr / x-only key support until it is ready.
 
-the boolean connectives — `and`, `or`, `not`, `thresh`, `if`, `match`, `cmp` — and the sort/coercion machinery (`prove`, the `with` binder, `branch`) are part of the language core and always available. capabilities apply only to the four gated categories.
+the boolean connectives — `and`, `or`, `not`, `thresh`, `if`, `match`, `cmp` — and the sort/coercion machinery (`prove`, the `with` binder, `branch`) are part of the language core and always available. capabilities apply only to the five gated categories above.
 
-a deposit may open against an operator only if every primitive in its descriptor appears in the operator's set. the protocol fixes a minimum capability set every operator must implement: as proof-obligation forms, `pk`, `pk_threshold`, and `hashlock` with all four hash types (sha256, hash256, ripemd160, hash160); as state predicates, `older` and `after`; as operation types, `spend`. beyond the minimum, capability sets vary across operators.
+a deposit may open against an operator only if every primitive in its descriptor appears in the operator's set. the protocol fixes a minimum capability set every operator must implement: as proof-obligation forms, `pk`, `pk_threshold`, and `hashlock` with all four hash types (sha256, hash256, ripemd160, hash160); as state predicates, `older` and `after`; as operation types, `spend`; as scheme tags, `wsh`. `tr` is opt-in beyond the minimum. beyond the minimum, capability sets vary across operators.
 
 cosigning quorum members must implement every primitive their operator declares — quorum members verify the operator's evaluations and must run the same evaluator. quorum formation rejects members whose declared implementation does not cover the operator's declared set.
 
@@ -217,10 +238,10 @@ it does not affect:
 
 ## examples
 
-delegate with allowance and recovery:
+delegate with allowance and recovery, under the default scheme:
 
 ```
-with(
+wsh(with(
   user = K1,
   delegate = K2,
   guardians = [K3, K4, K5],
@@ -246,7 +267,7 @@ with(
     branch(delete, prove(pk(user))),
     branch(else, false)
   )
-)
+))
 ```
 
 user spends without limit. delegate spends up to 10% of balance per operation with a rolling 30-day cap of 30% of balance. a 2-of-3 guardian quorum sends to `recovery_to` after roughly 30 days of inactivity. modifications require the user's signature; other operation types are denied.
@@ -285,7 +306,7 @@ with(
 
 the rebalancer may send to the counterparty only if an oracle attestation by `oracle` matches the operation's amount within 50 basis points (the schema's tolerance). user retains unilateral spending authority. modifications and other operation types are denied. `price_schema` here is a schema kind whose exact form is deferred to a future dep; this example illustrates the discharge shape, not the concrete schema vocabulary.
 
-guardian-driven principal-key rotation:
+guardian-driven principal-key rotation (implicit `wsh`):
 
 ```
 with(
@@ -299,7 +320,7 @@ with(
         and(
           prove(pk_threshold(3, guardians)),
           state(blocks_since_activity_at_least, 8640),
-          cmp(=, operation_path(), path(0))
+          cmp(=, operation_path(), path(0, 0))
         )
       )
     ),
@@ -308,7 +329,34 @@ with(
 )
 ```
 
-user spends and modifies freely. a 3-of-4 guardian quorum may replace the subtree at path `[0]` — the user's authorization clause — after roughly 60 days of inactivity. this is the recovery path that requires expansion of authority and that capability-narrowing systems cannot express.
+user spends and modifies freely. a 3-of-4 guardian quorum may replace the subtree at path `[0, 0]` — `[0]` into the body, then `[0]` into the body's match, addressing the spend branch body (the user's clause) — after roughly 60 days of inactivity. this is the recovery path that requires expansion of authority and that capability-narrowing systems cannot express.
+
+internal-key bypass over the same policy:
+
+```
+tr(K_super, with(
+  user = K1,
+  guardians = [G1, G2, G3, G4],
+  in match(operation_type(),
+    branch(spend, prove(pk(user))),
+    branch(replace,
+      or(
+        prove(pk(user)),
+        and(
+          prove(pk_threshold(3, guardians)),
+          state(blocks_since_activity_at_least, 8640),
+          cmp(=, operation_path(), path(1, 0))
+        )
+      )
+    ),
+    branch(else, false)
+  )
+))
+```
+
+semantically `or(prove(pk(K_super)), body)`. `K_super` authorizes any operation, including modifications, regardless of the body — the calculus's structural analog of bitcoin p2tr's key-path. all guard and recovery semantics of the body are preserved when `K_super` does not sign; when it does, the body is bypassed. choosing the internal key is a security decision distinct from choosing the script-path keys, and its custody discipline must reflect that.
+
+note the path shift: under `tr`, the body root is at `[1]` (with `[0]` reserved for the internal key), so the spend branch body is at `[1, 0]` rather than the `[0, 0]` of the `wsh` form. an authorized `replace` operation at path `[0]` of this descriptor rotates `K_super` itself.
 
 ## open questions
 

@@ -19,7 +19,7 @@ a single dep fixing all three keeps the fraud-proof shape singular (dep-16's §f
 1. **canonical**: every object has exactly one valid encoding. decoders reject non-canonical input — non-canonical sort order, duplicate entries where uniqueness is required, unknown tags, or trailing bytes after the declared structure. this is stronger than "deterministic encoder": it closes the door on an adversary presenting a second encoding of the "same" object to a verifier. each top-level object — descriptor, operation preimage, snapshot — must consume its entire input; bytes left over after the declared structure are a parse error, not someone else's data.
 2. **tagged and length-prefixed**: every composite is a 1-byte type tag followed by length- or count-prefixed contents, so a decoder never guesses boundaries.
 3. **domain-separated**: every hash is a tagged hash (below), so a preimage valid in one role can never be reinterpreted in another.
-4. **versioned**: a leading version byte on each top-level object permits later revision without ambiguity. this dep is version `0x01` throughout.
+4. **versioned**: each top-level object's leading byte is its format discriminator, so a decoder always knows which rules to apply before reading anything else. operations and snapshots have no wrapper notion, so their leading byte is a plain version byte and this dep fixes it at `0x01`. descriptors *do* have a wrapper notion — the scheme tag (`wsh`, `tr`) plays the discriminator role, in the spirit of bitcoin's witness versions: `OP_0` and `OP_1` distinguish p2wsh from p2tr without a separate format-version byte, and BIP-380 mints a new wrapper name (`tr`) for a new format rather than bumping an existing one. dep-17 follows the same pattern. future revisions either assign a new scheme tag or — for revisions that do not change the descriptor's leading discriminator — bump a version byte placed after the scheme tag.
 5. **fixed-width integers**: ledger integers are 16-byte big-endian two's complement (matching dep-16's `i128` value width); counts and lengths are 4-byte big-endian unsigned; nonces are 8-byte; block heights are 4-byte. no variable-length integers, so there is no minimality rule to get wrong.
 
 ### tagged hashing
@@ -59,6 +59,7 @@ capability-gated, `u16`:
 
 fixed structural, `u8`:
 
+- **scheme tags** (descriptor wrapper): `wsh=0x01`, `tr=0x02`. these play the role of bitcoin's witness versions: the leading byte of a descriptor encoding selects its layout (see *descriptor encoding* below). a new wrapper takes a new tag; tags are never reused.
 - **comparison ops**: `eq=0x00`, `lt=0x01`, `le=0x02`, `gt=0x03`, `ge=0x04`.
 - **node tags** (term encoding): `const=0x00`, `and=0x01`, `or=0x02`, `thresh=0x03`, `not=0x04`, `if=0x05`, `match=0x06`, `cmp=0x07`, `state=0x08`, `prove=0x09`.
 - **value-term tags**: `lit=0x00`, `var=0x01`, `op=0x02`.
@@ -87,15 +88,21 @@ the `subtree` kind wraps a full term encoding (below) under the subtree tag; it 
 
 ## descriptor encoding
 
-a descriptor is its `with(...)` constant environment followed by its body term:
+a descriptor's leading byte is a *scheme tag* (registry above) that selects which wrapper, and therefore which layout, follows. dep-17 v1 defines two:
 
 ```
-descriptor -> 0x01 (version)
-              list< (symbol name, value) >        -- constants, sorted by name
-              term                                 -- the body
+wsh descriptor -> 0x01 (scheme=wsh)
+                  list< (symbol name, value) > constants     -- sorted by name
+                  term                                        -- the body
+
+tr  descriptor -> 0x02 (scheme=tr)
+                  bytes internal_key                          -- per the key serialization rules
+                  list< (symbol name, value) > constants     -- sorted by name
+                  bool body_present
+                  term                                        -- present iff body_present=0x01
 ```
 
-constants are encoded sorted by name so the encoding is independent of source order; a name matches `[a-z_][a-z0-9_]*`, and any other name (or a duplicate name) is non-canonical. a *term* (`B`) is a node tag and its children:
+a `wsh(...)` descriptor authorizes operations by evaluating its body; this is the unadorned form and what bare top-level bodies parse to in a forgiving source surface. a `tr(K)` descriptor authorizes any operation by a signature under `K`, with no body to consult; a `tr(K, BODY)` descriptor is semantically `or(prove(pk(K)), BODY)`, evaluated with key-path tried first as an optimization. the scheme tag is part of the descriptor commitment preimage, so a `wsh(BODY)` and a `tr(K, BODY)` over the same body produce distinct `descriptor_id`s — a fraud proof cannot be replayed across schemes. constants are encoded sorted by name so the encoding is independent of source order; a name matches `[a-z_][a-z0-9_]*`, and any other name (or a duplicate name) is non-canonical. a *term* (`B`) is a node tag and its children:
 
 ```
 const  -> 0x00, bool
@@ -131,7 +138,7 @@ attest       -> 0x0005, vterm, schema
 
 a *schema* is a `u16` kind id (registered above) followed by its payload; `price_within_bps` (`0x0000`) carries `u32 tolerance_bps`.
 
-this encoding is what `ast_ref` reifies, what `subtree_at` compares against, and what `ast_shape_at` reads the leading node tag of. it is also what the descriptor commitment hashes.
+the *term* encoding is what `ast_ref` reifies, what `subtree_at` compares against, and what `ast_shape_at` reads the leading node tag of. ast operations navigate paths into the body term; the scheme wrapper (and a `tr` descriptor's internal key) is structural and is not addressed by any path. the *full descriptor* encoding — scheme tag and all — is what the descriptor commitment hashes.
 
 ### descriptor commitment
 
@@ -194,14 +201,14 @@ the relationship to the state-commitment dep is one of layering: that dep specif
 dep-16 names three opaque objects; this dep defines them:
 
 - `Operation::signing_message` is `operation_sighash` (or its preimage, with the verifier hashing); the dep-16 reference `EcdsaVerifier` signs and verifies over it.
-- the descriptor a fraud proof carries is the descriptor encoding above; `ast_ref` / `subtree_at` / `ast_shape_at` operate on it; `descriptor_id` is its commitment.
+- the descriptor a fraud proof carries is the descriptor encoding above (scheme tag, then scheme-specific payload); `descriptor_id` is its commitment. `ast_ref` / `subtree_at` / `ast_shape_at` navigate paths into the body term, not the wrapper.
 - the `s` a fraud proof carries is the snapshot encoding above; dep-16's state predicates and ledger value functions read its fields.
 
 nothing in dep-16's evaluation algorithm changes; this dep only removes the "treated as opaque bytes" caveats from its determinism and signature claims.
 
 ## open questions
 
-- **key serialization for non-secp key types.** v1 fixes compressed secp256k1. if dep-16 admits other key types (e.g. for non-bitcoin signing), each needs a fixed serialization and a tag.
+- **key serialization across schemes.** v1 fixes 33-byte compressed secp256k1 for ECDSA contexts and 32-byte BIP-340 x-only for Schnorr / `tr` internal-key contexts; the spec defers selection to "the key type's canonical serialization." if dep-16 admits other key types (e.g. for non-bitcoin signing), each needs a fixed serialization, and a per-scheme rule may be needed to fix which is used where.
 - **descriptor encoding size bound.** the cost cap is an operator-local policy (dep-16); whether the canonical encoding should additionally bound nesting depth or total size at the protocol level, to bound `subtree_at` comparison cost during replay, is unsettled.
 - **snapshot field set.** the snapshot layout enumerates the v1 ledger reads; it must grow in lockstep with the dep-16 ledger value-function and state-predicate vocabulary, and the versioning rule is the mechanism for that.
 - **exposing nonce/expiry to the evaluator.** deferred; noted above.
