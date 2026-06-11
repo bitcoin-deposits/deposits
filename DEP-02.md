@@ -68,7 +68,7 @@ Each `cosig_entry` is:
 
 Total entry size: 129 bytes. Entries MUST be sorted by cosigner_pubkey (lexicographic on serialized bytes). This ensures deterministic hashing. Decoders MUST either reject unsorted input or canonicalize it before verifying `current_hash` and the operator signature — otherwise a malicious sender can reorder entries to produce a distinct but otherwise-valid hash for the same logical cosignature set, enabling signature malleability.
 
-After `QuorumBegin`, updates MUST include at least `floor(n/2) + 1` cosignatures from distinct quorum members (where n is the quorum size). Updates with fewer cosignatures are non-conforming.
+After `QuorumBegin`, updates MUST carry the cosignature threshold specified in DEP-05 §Lifecycle for the operation's class and the lifecycle tier at the update's `block_height`. Within the active period (`block_height < quorum_expiry`) this resolves to `floor(n/2) + 1` cosignatures from distinct quorum members (where n is the quorum size) — strict majority — for every operation. Past `quorum_expiry`, only establishment operations (`QuorumAddMember`, `QuorumRemoveMember`, `QuorumBegin`) remain cosignable and their required threshold cascades through the tiers in DEP-05 §Lifecycle; updates carrying any other op type past `quorum_expiry` are non-conforming regardless of cosignature count.
 
 For backward compatibility, decoders SHOULD accept the deprecated single-cosig format (tags 14/16/18) from pre-quorum updates and upgrades in progress.
 
@@ -88,7 +88,7 @@ For backward compatibility, decoders SHOULD accept the deprecated single-cosig f
 
 The operator signs the content and all co-signatures (see Signing). Their signature is folded into `chain_hash`, which becomes the next update's `previous_hash`. All signatures are committed to the chain without circularity.
 
-After `QuorumBegin`, the cosig entries are mandatory — omitting them is non-conforming. Before quorum establishment, cosig entries are omitted on all updates **except the first `QuorumBegin`**, which MUST carry cosignatures from `floor(n/2) + 1` of the members staged via prior `QuorumAddMember` operations (n = `len(next_quorum_members)` at the point the update is applied). Decoders MUST reject a first `QuorumBegin` that lacks this majority. Without the rule, the operator could unilaterally transition to Active with a fabricated member list or a reserves outpoint that doesn't actually exist on-chain. See DEP-05 §QuorumBegin for the full rule and DEP-03 §QuorumBegin for the on-chain verification obligation cosigners must discharge before signing.
+After `QuorumBegin`, the cosig entries are mandatory at whatever threshold DEP-05 §Lifecycle prescribes for the operation type and tier — omitting them entirely, or providing fewer than the prescribed count, is non-conforming. Before quorum establishment, cosig entries are omitted on all updates **except the first `QuorumBegin`**, which MUST carry cosignatures from `floor(n/2) + 1` of the members staged via prior `QuorumAddMember` operations (n = `len(next_quorum_members)` at the point the update is applied). Decoders MUST reject a first `QuorumBegin` that lacks this majority. Without the rule, the operator could unilaterally transition to Active with a fabricated member list or a reserves outpoint that doesn't actually exist on-chain. See DEP-05 §QuorumBegin for the full rule and DEP-03 §QuorumBegin for the on-chain verification obligation cosigners must discharge before signing.
 
 The first update (sequence 0) has `previous_hash` = `[0; 32]`.
 
@@ -106,7 +106,7 @@ Each quorum member independently signs a tagged hash over the update content and
 
 `current_hash` is not signed directly — it incorporates the co-signatures themselves, so it cannot be known at signing time.
 
-The operator collects `floor(n/2) + 1` co-signatures before finalizing the update. Each cosigner independently validates the operation against their local state replica and verifies chain continuity from their validated tip before signing.
+The operator collects the threshold of co-signatures specified in DEP-05 §Lifecycle (within the active period this is `floor(n/2) + 1`; past `quorum_expiry` it cascades through the tier schedule and only authorizes establishment operations) before finalizing the update. Each cosigner independently validates the operation against their local state replica and verifies chain continuity from their validated tip before signing.
 
 ### Operator
 
@@ -120,7 +120,7 @@ The operator signs after collecting the required majority of co-signatures. This
 
 ## Operations
 
-The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte discriminant. Deposit operations authorize via miniscript descriptor witnesses -- `pk()` is the common case but any valid miniscript is supported.
+The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte discriminant. Deposit operations authorize via the dep-16 descriptor language — `pk()` is the common case, but the calculus generalizes miniscript with state predicates, proof obligations, and operation-type routing. See DEP-16 for the full grammar and admission rules; DEP-17 for the canonical encodings the fraud-proof system replays against.
 
 ### Discriminants
 
@@ -300,6 +300,29 @@ Field IDs 106 (entropy_block_hash) and 116 (entropy_block_height) were used by a
 | 0 | fixed_msats | 8 |
 | 2 | rate_bps | 2 |
 
+## Batch (disc 90)
+
+A single signed update can carry up to `MAX_BATCH_OPS = 64` inner operations via the `Batch` op type. The batch is **transactional**: all inner ops apply or none do. If any inner op fails validation or state-application, the entire batch is rejected and the ledger is left unchanged.
+
+Wire format: the `Batch` op's TLV body carries a single `BATCH_OPS` field (tag 298) whose payload is
+
+    u16 BE: inner-op count
+    repeated: u32 BE inner-op length-prefix, inner-op TLV bytes
+
+Each inner op is encoded as a standalone TLV-LedgerOperation; the outer Batch's TLV simply concatenates them with framing.
+
+**Admission gates** (enforced both at TLV decode and at `validate_operation`):
+
+- **Non-empty.** A batch with zero inner ops is rejected.
+- **Bounded.** A batch with more than `MAX_BATCH_OPS` inner ops is rejected. The cap bounds both per-update validation cost and fraud-proof scanner cost — even though Batch nesting is forbidden, a single deep batch could pathologically inflate scan time.
+- **Flat.** A `Batch` inside a `Batch` is rejected. Nesting would require a recursive guard everywhere a fraud scanner walks the history; the flat-only rule keeps the recursion at most one level deep.
+
+**Fraud-proof semantics.** Scanners that look for a credit on a payment_hash or `(txid, vout)` (DEP-06 §"Uncredited") recurse into Batch contents: a `Batch` containing an `InvoiceCredit` for the disputed payment counts the same as a bare `InvoiceCredit`. This preserves the fraud-proof invariant that the operator can't hide a credit inside a batch to defeat detection.
+
+**Cosignature semantics.** Batched updates carry exactly one set of cosignatures over the outer signed update (which encodes the Batch op in `message`). Cosigners validate by replaying the batch transactionally; on success they sign the same single SignedLedgerUpdate. This is the whole point — N operations cost one cosignature round.
+
+**When to batch.** Agent commerce workloads where one wallet performs many micro-operations (e.g. a settlement service running hundreds of transfers per minute) benefit most. Single-operation updates remain valid and are still the right choice for high-value or one-shot operations where atomic-across-N is irrelevant.
+
 ## Related DEPs
 
 - [DEP-03](DEP-03.md): On-chain transactions
@@ -310,6 +333,8 @@ Field IDs 106 (entropy_block_hash) and 116 (entropy_block_height) were used by a
 - [DEP-08](DEP-08.md): Deposits
 - [DEP-09](DEP-09.md): Transfers
 - [DEP-10](DEP-10.md): Payment channels
+- [DEP-16](DEP-16.md): Self-modifying ledger-aware descriptors (the calculus deposit operations authorize against)
+- [DEP-17](DEP-17.md): Canonical encodings (operation preimage, descriptor commitment, witness encoding)
 
 ## References
 

@@ -14,24 +14,60 @@ The reserves UTXO uses a Taproot output with a tapscript tree containing tiered 
 
 ### Spending Tiers
 
+Each tier (other than the immediate quorum-majority path) is gated by an
+absolute `OP_CLTV` timelock anchored to the ledger's recorded
+`quorum_expiry`. The post-expiry cascade only opens once the quorum's
+declared lifetime has elapsed; during the active period the only
+on-chain spend path is the quorum-majority tier, which is what the
+routine rotation TX uses. This means:
+
+- The on-chain script's protection does **not** decay with UTXO age —
+  it decays with `quorum_expiry`. Refreshing `quorum_expiry` (via a
+  rotation that emits a new `QuorumBegin`) re-pins all post-expiry
+  tiers to the new deadline.
+- An operator who fails to rotate before `quorum_expiry` loses
+  exclusive spending control on a fixed schedule, with the quorum
+  members' recovery paths opening earlier than the operator's own.
+- The operator's solo path is the absolute last resort, opening only
+  after every quorum-driven path has had time to act.
+
 For a quorum of n members:
 
 | Tier | Signers | Timelock | Purpose |
 |---|---|---|---|
-| 0 | Majority of quorum (no operator) | Immediate | Normal operations: rotation, co-signed settlements |
-| 1 | Minority of quorum (no operator) | 1008 blocks (~1 week) | Degraded quorum recovery when members disappear |
-| 2 | Operator only | 2016 blocks (~2 weeks) | Operator solo when quorum is unresponsive |
-| 3 | Any single party | 4032 blocks (~4 weeks) | Emergency last resort recovery |
+| 0 | Majority of quorum (no operator) | None — anytime | Normal operations: rotation, co-signed settlements |
+| 1 | Minority of quorum (no operator) | `quorum_expiry + 720` blocks (~5 days) | Degraded quorum recovery when members disappear |
+| 2 | Single quorum member (no operator) | `quorum_expiry + 4032` blocks (~4 weeks) | Recovery when only one member remains active |
+| 3 | Operator only | `quorum_expiry + 8064` blocks (~8 weeks) | Operator solo, last resort after all quorum paths failed |
 
-The operator is deliberately excluded from Tier 0 and 1. The quorum can operate and recover reserves without operator participation. The operator's solo spending path (Tier 2) is only available after a significant timelock, ensuring the quorum has ample opportunity to act first.
+The operator is deliberately excluded from Tiers 0–2 and only gets
+Tier 3 after every quorum-driven path has been available for weeks.
+Routine rotation flows through Tier 0 and so has no timelock — the
+quorum-majority cosigns each rotation TX while the current quorum is
+still active.
 
-For the simple 2-party case (n ≤ 2):
+This on-chain tier schedule is mirrored off-chain by the cosignature
+threshold for *establishment operations* (`QuorumAddMember`,
+`QuorumRemoveMember`, `QuorumBegin`) — see DEP-05 §Lifecycle for the
+full event table. The two layers share the same anchor and offsets, so
+authority at the chain tip is identical whether you read it from the
+tapscript leaves or from the off-chain cosign rule. Non-establishment
+operations remain strictly Tier-0 cosignable and become uncosignable
+past `quorum_expiry` until a fresh `QuorumBegin` resets the schedule.
+
+For the simple 2-party case (n ≤ 2), the minority and single-member
+tiers collapse (in a 2-of-2 quorum, one member IS both), so the
+cascade is:
 
 | Tier | Signers | Timelock |
 |---|---|---|
-| 0 | Both quorum members | Immediate |
-| 1 | Operator only | 2016 blocks |
-| 2 | Any single party | 4032 blocks |
+| 0 | Both quorum members | None — anytime |
+| 1 | Single quorum member | `quorum_expiry + 720` blocks (~5 days) |
+| 2 | Operator only | `quorum_expiry + 8064` blocks (~8 weeks) |
+
+Block heights are absolute, encoded as `OP_CLTV` (BIP-65) against
+`nLockTime`. Spending a non-zero-tier path requires the spending TX
+to set `nLockTime ≥ quorum_expiry + offset`.
 
 ## QuorumBegin (disc 12)
 
@@ -82,10 +118,10 @@ When a ledger becomes contested (dispute), quorum members compete for custody vi
 
 The lottery output's tapscript tree contains:
 
-- **Leaf 0 — Primary lottery claim.** Verifies all N preimages, computes `sum mod N`, dispatches to the matching pubkey via `OP_CHECKSIG`. Three dispatch regimes by N:
+- **Leaf 0 — Primary lottery claim.** Verifies all N preimages, enforces per-preimage size bounds (`17 <= LEN(preimage_i) <= 16+N` via `OP_SIZE OP_DUP <17> OP_GREATERTHANOREQUAL OP_VERIFY OP_DUP <16+N> OP_LESSTHANOREQUAL OP_VERIFY` immediately after each `OP_EQUALVERIFY`), computes `sum mod N`, dispatches to the matching pubkey via `OP_CHECKSIG`. The size bounds reject a committer who hashed an out-of-range preimage — without them, a malicious committer could reveal a preimage of any length, the hash check would pass (it matches what they committed to), and `contribution = LEN - 16` would take an arbitrary value that shifts `sum mod N` and corrupts the draw for the entire quorum. Three dispatch regimes by N:
   - **Linear** (N=2..=5 and N=11..=15): repeated conditional subtraction for `sum mod N`, then linear `if/elif` cascade on the index
   - **CombinedTable** (N=6..=10): skip the modulo; emit one dispatch arm per integer sum value in `[N, N²]` directly routing to `pubkey_(s mod N)`
-- **Leaves 1..=N** (only for N≥11): K=1 partial-reveal claim leaves, one per missing-disputant index, prefixed with `OP_PUSHNUM_72 OP_CSV OP_DROP`. Each is a sub-lottery for the (N-1) revealers excluding that index, picking its own dispatch regime by N-1.
+- **Leaves 1..=N** (for N≥3): K=1 partial-reveal claim leaves, one per missing-disputant index, prefixed with `OP_PUSHNUM_72 OP_CSV OP_DROP`. Each is a sub-lottery for the (N-1) revealers excluding that index, picking its own dispatch regime by N-1. The per-preimage size bounds inside each sub-leaf use the *parent* N (`17..=16+N`), not `N-1` — surviving disputants committed under the parent contract and their valid preimages may legitimately extend to length `16+N`. The floor is `N=3` because the sub-lottery needs at least 2 participants; at `N=2` a single non-revealer leaves only one possible spender, making "lottery" degenerate.
 - **Long-tail recovery cascade**: `<csv> OP_CSV OP_DROP <threshold> <pubkeys> OP_CHECKMULTISIG` at CSV 144 / 1008 / 4032 with descending thresholds T / T-1 / T-2 (where T is the recovery threshold computed at confiscation time).
 - **Timeout-recovery escape hatch**: CSV 8064 (~8 weeks) with threshold 1 — any single recovery voter can sweep if all else has failed.
 
@@ -99,7 +135,7 @@ For the primary claim leaf, the witness is:
 
 with the signature at the bottom of the stack. The script consumes preimages in disputant order, accumulates contributions on the altstack, computes the dispatch index, and verifies the signer's pubkey matches `pubkey_(sum mod N)`.
 
-For partial-reveal leaves (N≥11): identical layout, but only the `N-1` revealer preimages, and the spending input must have `nSequence >= 72`.
+For partial-reveal leaves (N≥3): identical layout, but only the `N-1` revealer preimages, and the spending input must have `nSequence >= 72`.
 
 For recovery leaves: standard tapscript multisig — `K` of `N` signature slots filled (with empty pushes for unused slots), and `nSequence >= csv_blocks`.
 
@@ -126,15 +162,22 @@ propagation:
 
 ### Respectful custody (QuorumExpired only)
 
-When the operator fails to rotate before `quorum_expiry`, the custody transfer
-is *respectful*:
+When the operator fails to rotate before `quorum_expiry`, respectful
+custody transfer becomes available — but it now races against the
+operator's own re-establishment path under the same lifecycle tiers
+(see DEP-05 §Lifecycle and DEP-06 §"Race: Re-establishment vs
+Confiscation"). If the operator self-rescues first with a degraded
+`QuorumBegin`, no custody transfer occurs.
 
 - The fraud proof is `QuorumExpired`. Evidence is just an anchor block hash
   whose height in the verifier's chain exceeds the ledger's `quorum_expiry`.
 - Cosigners enforce the deadline at the cosign edge: past `quorum_expiry`,
-  they refuse to cosign *any* operation, including a fresh `QuorumBegin`.
-  The operator must rotate *before* the deadline; missing it is fatal to the
-  current quorum.
+  they refuse to cosign *value-moving* operations. They WILL still cosign
+  *establishment* operations (`QuorumAddMember`, `QuorumRemoveMember`,
+  `QuorumBegin`) at the threshold required for the current lifecycle
+  tier — see DEP-05 §Lifecycle. Missing `quorum_expiry` is therefore
+  not fatal; it opens both the confiscation path (this section) and
+  the operator's degraded re-establishment path concurrently.
 - Confiscation tx is bifurcated:
   - `obligations` worth of reserves → lottery winner
   - `(reserves − obligations) + full collateral` → operator's pubkey (change)

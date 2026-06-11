@@ -75,7 +75,7 @@ each rotation of the reserves utxo commits the ledger's tip hash on-chain, givin
 
 the taproot output's script tree contains escalating recovery paths: a quorum majority can spend immediately, and progressively smaller subsets can spend after increasing timelocks, ending in a single-party path after the longest window. these paths guarantee that funds remain recoverable no matter which participants disappear. they also put a clock on everyone: the operator must rotate the utxo before the first window opens, and safety against a misbehaving operator assumes a quorum majority that acts within the shortest window. liveness is measured in blocks, not goodwill
 
-operators should run multiple ledgers with independent quorums. this provides probabilistic safety: an attacker must compromise all quorums simultaneously to avoid losing collateral on the others. with a 40/60 reserves/collateral split and 5 independent ledgers, simulation shows the protocol is safe against a single coalition controlling up to 49% of the network.
+operators should run multiple ledgers with independent quorums. this provides probabilistic safety: an attacker must compromise all quorums simultaneously to avoid losing collateral on the others. with a 40/60 reserves/collateral split and 5 independent ledgers, simulation shows the protocol is safe against a single coalition controlling up to 49% of the network. simulation parameters and the adversary model are published alongside the specification
 
 ## quorum
 

@@ -34,6 +34,7 @@ Wallets connect to both: operator relays for requests, ledger relays for reading
 | 39100 | Advertisement | Replaceable | deposits-node | Operator terms, fees, reserves (JSON, NIP-33, `d`=ledger ID) |
 | 39101 | Price Oracle | Replaceable | deposits-node | BTC/USD price (JSON, NIP-33, `d`=`btcusd`) |
 | 39102 | Courier Advertisement | Replaceable | deposits-node | Cross-ledger routing capacity and fees (JSON, NIP-33, see DEP-13) |
+| 39103 | Bridge Advertisement | Replaceable | any deposit holder with an LN node | Lightning ↔ ledger bridging capacity and fees (JSON, NIP-33, see DEP-10) |
 
 ### Identity Verification (wallet ↔ lightning-verifier ↔ operator)
 
@@ -120,11 +121,82 @@ Operators publish NIP-33 replaceable events advertising their terms. The `d` tag
 - Deposit limits (min/max)
 - Access-control flags (whether `deposit_open` requires an attestation; allowed lightning-address domains)
 - Relay URL
-- Operator's observed Bitcoin chain tip at publish time
+- Operator's observed Bitcoin chain tip at publish time (informational; clients that need a fresh tip SHOULD prefer the Kind 39101 price-oracle stream — see §Price Oracle below)
+- `guarantees` — *(optional)* a machine-readable guarantee matrix that wallets route on. See §Guarantee Matrix below.
+- `capabilities` — *(optional)* the operator's advertised DEP-16 capability set. See §Capabilities below.
 
 Earlier drafts also carried `total_obligations` and `available_headroom`. Both were dropped — the operator can trivially inflate them with self-paid Lightning invoices, so they're not reliable trust signals. Wallets that need capacity information should either discover a courier already holding funds on this ledger, or trust the protocol invariant `reserves ≥ obligations` enforced by the quorum's co-signers.
 
 Wallets discover operators by fetching Kind 39100 events from ledger relays.
+
+### Guarantee Matrix
+
+A guarantee matrix is a list of `(regime, amount-range, shape, honesty, time-profile)` rows. Wallets pick the row that matches the operation they're about to perform and route accordingly: an "online receive" path may demand `settlement_atomic`, falling back to `deterrence` only when nothing stronger is offered for the amount.
+
+```jsonc
+"guarantees": [
+  {
+    "regime": "transfer_internal",
+    "min_msats": 0,
+    "max_msats": 18446744073709551615,
+    "shape": "settlement_atomic",
+    "honesty": "operator_and_quorum",
+    "time_profile": { "happy_path_blocks": 1, "worst_case_blocks": 6 }
+  },
+  {
+    "regime": "invoice_receive",
+    "min_msats": 0,
+    "max_msats": 18446744073709551615,
+    "shape": "deterrence",
+    "honesty": "operator_and_quorum_and_ln",
+    "time_profile": { "happy_path_blocks": 1, "worst_case_blocks": 720 }
+  }
+]
+```
+
+**Canonical regime names** (controlled vocabulary, open-ended for forward compatibility):
+
+| Regime | Meaning |
+|---|---|
+| `onchain_credit` | Wallet sends bitcoin on-chain; operator credits the deposit after confirmations. |
+| `onchain_withdraw` | Wallet asks the operator to broadcast a withdrawal to a wallet-controlled address. |
+| `invoice_receive` | Wallet receives a Lightning payment via the HTLC-bridge model (DEP-10 §Receive). The wallet picks any bridge offering this service (the operator itself, or any third-party deposit holder with an LN node), generates the preimage, hands the bridge only the hash. The bridge issues a hold invoice; the on-ledger `TransferLock` is structurally bound to the upstream HTLC. Always `shape: settlement_atomic`, `honesty: bridge_only` — the bridge cannot claim upstream without revealing the preimage in a cosigned ledger record. The operator advertising this row asserts that their ledger supports the bridge mechanic (timeout-ordering cosigner rules, BOLT-11 correlation against cosigned invoice records); it does NOT mean the operator itself is the bridge. |
+| `invoice_receive_legacy_deterrence` | Wallet receives a Lightning payment via the operator-held-preimage path (DEP-10 §"Offline receive"): operator's LN node holds the preimage and commits `InvoiceCredit` unilaterally. `shape: deterrence`, `honesty: operator_only`. Provided for offline-receive use cases (LNURL gateways, permanent-cold-storage deposits) where the wallet cannot come online during the HTLC window. Wallets seeking the atomic path MUST refuse operators that only advertise this row. |
+| `invoice_pay` | Wallet pays a Lightning invoice via a bridge (DEP-10 §Pay). The wallet locks the (invoice amount + bridge service fee) to the bridge's deposit via a standard `TransferLock`; the bridge pays the invoice via LDK and `TransferCompletes` revealing the preimage. `shape: settlement_atomic` for the locking step; actual payment outcome still subject to LN reachability (lock times out and refunds if the bridge fails to route). Bridges set their own service fees per invoice or per published schedule; this DEP-04 row asserts the operator's ledger supports the bridge mechanic, not that the operator itself runs a bridge. |
+| `transfer_internal` | Transfer between two deposits on the same ledger. |
+| `transfer_courier` | Cross-ledger transfer via an HTLC/PTLC courier. |
+
+**Shape** is one of:
+
+- `settlement_atomic` — a quorum cosignature is required before the operator's commit; the credit and the receipt are tied together in a single signed update. Fraud requires a quorum collusion.
+- `deterrence` — the operator commits unilaterally and the wallet's recourse is the fraud proof; uncredited-payment evidence triggers slashing post-hoc. One confirmed theft costs the operator their entire collateral, so the upside of stealing a single payment is bounded by what the payment alone produced.
+- `advisory` — no protocol-level enforcement; reputation only. Used for operations the protocol doesn't otherwise gate (e.g. routing-policy choices on outbound Lightning payments).
+
+**Honesty** is one of `operator_only`, `operator_and_quorum`, `operator_and_quorum_and_ln`, `operator_and_courier`.
+
+**Time profile** carries `happy_path_blocks` (expected wait under normal conditions) and `worst_case_blocks` (bounded wait under the degraded conditions this regime tolerates).
+
+**Defaults and forward compatibility.** Operators MAY publish multiple rows for the same regime over disjoint amount ranges (e.g., `settlement_atomic` up to 1 BTC, `deterrence` above). Wallets MUST treat absence of the `guarantees` field as *"no commitment"* rather than *"no protection"* — older daemons published advertisements before this field existed. A wallet that doesn't recognize a regime name SHOULD skip the row and continue rather than abort. Adding new regime names is a non-breaking codec change.
+
+**Trust path.** The matrix is signed by the operator's Nostr event signature, so a wallet who trusts `operator_pubkey` for the advertisement trusts the matrix. The matrix is a *promise*, not a *proof* — the protocol-level guarantees come from the deposit script, the quorum, and the slashing economics. A misadvertised matrix that an operator then fails to honor is itself a reputational signal but not directly slashable.
+
+### Capabilities
+
+The `capabilities` field projects the operator's DEP-16 capability set (see DEP-16 §capability) to three flat lists, so wallets can filter operators by the descriptor primitives they implement without reaching for the calculus directly.
+
+```jsonc
+"capabilities": {
+  "obligations":  ["pk", "pk_h", "pk_any", "pk_threshold", "hashlock", "pointlock", "attest"],
+  "state_preds":  ["older", "after", "amount_at_most", "destination_is", "balance_at_least", ...],
+  "value_fns":    ["add", "sub", "mul", "div", "min", "max", "pct", "bps", "deposit_balance", ...]
+}
+```
+
+Names use the canonical lowercase spec spelling — `pk_threshold` for the n-of-m signature obligation, `pointlock` for the PTLC primitive, `hashlock` for the four-hash HTLC obligation. Wallets compare with `contains`.
+
+**Default semantics.** An empty `capabilities` (or its absence) means *"operator did not publish capabilities"*. Wallets MUST then assume only the protocol-mandated minimum (`pk`, `pk_h`, `hashlock`, `older`, `after`), in line with `CapabilitySet::minimum()` in the calculus. Wallets that need an extended primitive — most notably `pointlock` for PTLC courier routes (DEP-13 §"Courier PTLC pattern") — MUST verify the capability is advertised by every operator on the route before constructing descriptors that use it. Operators that don't advertise the capability refuse such descriptors at admission, so probing without checking burns capital on doomed locks.
+
+**Trust path.** Same as `guarantees`: the operator's Nostr event signature attests the capability list. A misadvertised capability that the operator then rejects at admission is a wallet-side error that recovers gracefully (the wallet falls back to HTLC, or picks a different operator); the protocol-level safety isn't at risk.
 
 ## Operator → Delegate Delegation
 
@@ -162,6 +234,91 @@ NIP-26 delegated event signing and the existing DEP-04 subkey-attestation patter
 ### Backwards compatibility
 
 Older wallets that don't read `delegate_pubkey` will treat the advertisement's event author as the operator's messaging identity. This works as long as the daemon's `self.keys` is the operator key (operator-key-for-everything mode). Once the daemon switches to delegate-key-for-Nostr (this commit's follow-up), the advertisement still authors as `operator_pubkey` (signed by signer), but Kind 9100 events author as `delegate_pubkey`. Older wallets filtering Kind 9100 by `author=operator_pubkey` will miss them and need to follow the delegation. Operators rolling forward should publish a transition advertisement with both keys' addresses available before flipping.
+
+## Bridge Advertisements (Kind 39103)
+
+Lightning ↔ ledger bridges advertise via NIP-33 replaceable events on the ledger relay, mirroring the courier advertisement pattern (Kind 39102). The `d` tag is the bridge's pubkey, enabling per-bridge replacement.
+
+```json
+{
+  "bridge_pubkey": "<hex>",
+  "network": "bitcoin",
+  "ledgers": [
+    {
+      "ledger_id": "<64 hex>",
+      "deposit_id": "<32 hex>",
+      "balance_msats": 500000000,
+      "lock_type": ["htlc", "ptlc"],
+      "receive": {
+        "fee_fixed_msats": 100,
+        "fee_rate_bps": 30,
+        "min_amount_msats": 10000,
+        "max_amount_msats": 100000000
+      },
+      "pay": {
+        "fee_fixed_msats": 200,
+        "fee_rate_bps": 50,
+        "quote_endpoint": "<optional Nostr DM action>"
+      }
+    }
+  ]
+}
+```
+
+- `ledgers` — one entry per ledger the bridge can service. The bridge holds a deposit on each.
+- `receive` — pricing for inbound bridging on that ledger (wallet receives via bridge's BOLT-11 → bridge's TransferLock). `fee_*` is the bridge's service margin, captured via the BOLT-11 spread; published as a flat schedule for amounts in `[min_amount_msats, max_amount_msats]`.
+- `pay` — pricing for outbound bridging on that ledger (wallet TransferLocks to bridge → bridge pays the BOLT-11). `fee_*` is the bridge's published baseline. If the bridge prefers per-invoice quoting (because routing variance is high), `quote_endpoint` names a Nostr-DM action wallets can hit to request a fresh quote per BOLT-11 — analogous to `request_route` for couriers (DEP-13).
+- `lock_type` — `htlc` always; `ptlc` only when both the bridge's deposit operator and the wallet's operator advertise the `pointlock` capability in Kind 39100. Wallets that need PTLC privacy MUST verify the capability on both ledgers before selecting a `ptlc`-advertising bridge.
+
+The protocol does NOT enforce that a bridge's published `receive`/`pay` schedule is honored — bridges are peer services, not protocol-attested ones. A bridge that publishes one price and quotes another loses business, but the wallet's only protocol-level recourse is the timeout-and-refund failure mode of any unanswered `TransferLock`. Wallets SHOULD prefer bridges with consistent published schedules over those that always per-invoice-quote (lower trust friction), and SHOULD aggregate reputation signals across multiple bridges per ledger.
+
+The cosigning quorum's role on bridge ops is structural (timeout-ordering, BOLT-11 correlation against cosigned invoice records, standard TransferLock conformance — see DEP-10 §"Bridge cosigner rules") — they do NOT verify the bridge's published prices against the lock, since prices are market-set and not part of the protocol fee surface.
+
+## Price Oracle (Kind 39101)
+
+Operators publish a NIP-33 replaceable event (`d`=`btcusd`, kind `39101`) carrying the BTC/USD spot price and the publisher's observed chain tip:
+
+```json
+{
+  "pair": "BTCUSD",
+  "price": 67234.50,
+  "block_height": 901234,
+  "timestamp": 1746547200
+}
+```
+
+- `pair` — currency pair. Reserved for future expansion; only `BTCUSD` is currently published.
+- `price` — BTC/USD spot price the operator observed (operators MAY source this from any oracle of their choice; clients SHOULD aggregate across operators rather than trust a single publisher).
+- `block_height` — *(since 2026-05)* the publishing operator's observed Bitcoin chain tip at the moment of publication. `0` means the publisher didn't include one (older daemons). Wallets ignore `0` and pick the highest non-zero value across all observed publishers.
+- `timestamp` — the operator's wall clock at publish (UNIX seconds). Non-load-bearing — Nostr's `created_at` is the canonical event time.
+
+The chain-tip piggyback lets light clients (browser wallets, gateways, explorers) learn the current Bitcoin height without running a node or polling an external block explorer. It is *not* a consensus-critical feed — clients use it for liveness checks (quorum-freshness, lock-timeout sanity) where being a few blocks stale is harmless. Anything that needs a tamper-evident height (e.g. fraud-proof verification) MUST anchor against an actual block hash, not this field.
+
+Wallets sample multiple recent events (typical limit: 5–10) and use the highest `block_height` seen, breaking ties by `created_at`. A single bad publisher cannot drag the tip backwards because `block_height` only ratchets up.
+
+## Wallet Pre-Open Quorum-Freshness Check
+
+A deposit opened against an operator whose quorum has lapsed is unrecoverable through the normal cosign path — the operator can no longer assemble a majority cosignature, and the wallet has no protocol-level recourse short of dispute. Wallets MUST therefore refuse to open new deposits on an operator whose quorum has expired, and SHOULD warn when expiry is imminent.
+
+The check uses two pieces of data already on the wire — no new operator-published field is required:
+
+1. **Quorum expiry block** — the `quorum_expiry` field (TLV type 86, see DEP-02 §TLV Field Tags) of the most recent `QuorumBegin` (op discriminant 12, see DEP-02 §LedgerOperation discriminants) in the target ledger's Kind 9100 stream. If the ledger has no `QuorumBegin` on record, the operator hasn't activated a quorum yet and the wallet MUST refuse: there is no cosign path at all.
+
+2. **Chain tip** — the highest `block_height` observed on a recent Kind 39101 price-oracle event (see §Price Oracle above).
+
+Decision rule:
+
+| Condition | Wallet action |
+|---|---|
+| no `QuorumBegin` on the ledger | refuse to open |
+| `tip ≥ quorum_expiry` | refuse to open (operator's quorum is past the expiry block) |
+| `quorum_expiry - tip < 144` blocks | warn but allow (≈ 1 day of headroom remaining) |
+| `quorum_expiry - tip ≥ 144` blocks | proceed |
+| `tip == 0` (no price feed observed) | skip the chain-tip half of the check; the QuorumBegin presence check still applies |
+
+Both inputs are fetched independently of the operator's own Kind 39100 advertisement. The advertisement's `current_block` and `quorum_state` fields are operator-self-reported and replaceable — they remain in the ad for at-a-glance debugging but wallets MUST NOT use them for the freshness gate. The Kind 9100 `QuorumBegin` is co-signed by a quorum majority and the Kind 39101 tip is corroborated across the publishing operator set, so neither can be unilaterally forged stale-true by a single operator.
+
+Explorer UIs that surface "quorum status" badges SHOULD use the same derivation so the operator's self-reported `quorum_state` cannot mask an actually-expired quorum.
 
 ## Wallet Identity and NIP-07
 
