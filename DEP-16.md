@@ -57,6 +57,7 @@ O ::=  pk(V)
     |  pk_any(V)                   V is a list of keys
     |  pk_threshold(k, V)          V is a list of keys
     |  hashlock(V)                 V is a hash; the function is encoded in the hash's type
+    |  pointlock(V)                V is a secp256k1 point; the witness reveals a scalar `s` with `G·s == V`
     |  attest(V, V)                first V is an oracle key; second is a schema
 ```
 
@@ -90,7 +91,9 @@ each parameterized predicate desugars to a comparison plus a base value function
 
 ## proof obligations
 
-proof obligations are the only constructs whose evaluation depends on `m`. each is satisfied by an entry the witness supplies under the appropriate key. `pk(K)` is satisfied iff `m` contains a valid signature by `K` over the canonical encoding of the operation, under the deposit's domain separator. `pk_any(keys)` is satisfied iff `m` contains a valid signature from at least one key in `keys`. `pk_threshold(k, keys)` is satisfied iff `m` contains valid signatures from at least `k` distinct keys in `keys`. `hashlock(H)` is satisfied iff `m` contains a value whose hash matches `H` under the function encoded in `H`'s type. `attest(K, schema)` is satisfied iff `m` contains a signed attestation by `K` whose payload satisfies `schema`.
+proof obligations are the only constructs whose evaluation depends on `m`. each is satisfied by an entry the witness supplies under the appropriate key. `pk(K)` is satisfied iff `m` contains a valid signature by `K` over the canonical encoding of the operation, under the deposit's domain separator. `pk_any(keys)` is satisfied iff `m` contains a valid signature from at least one key in `keys`. `pk_threshold(k, keys)` is satisfied iff `m` contains valid signatures from at least `k` distinct keys in `keys`. `hashlock(H)` is satisfied iff `m` contains a value whose hash matches `H` under the function encoded in `H`'s type. `pointlock(P)` is satisfied iff `m` contains a 32-byte scalar `s` such that `G·s == P` on secp256k1 — the PTLC analog of `hashlock`. `attest(K, schema)` is satisfied iff `m` contains a signed attestation by `K` whose payload satisfies `schema`.
+
+`pointlock` exists for cross-ledger transfer privacy. Two HTLC legs that share a payment hash are linkable on the relay; two PTLC legs that share a scalar after blinding (`P` on one leg, `P + G·t` on the other for a courier-chosen blinding `t`) are not. The witness layer carries a `scalars` map alongside the `preimages` map; satisfying `pointlock(P)` consumes one scalar. The mapping is otherwise identical to `hashlock`. See DEP-12 §"Courier PTLC pattern" for the blinding protocol.
 
 the `schema` argument of `attest` is a V value identifying a schema kind. each schema kind has a protocol-defined satisfaction relation between attestation payloads and the schema's parameters. the v1 vocabulary of schema kinds is deferred to a future dep; this dep specifies the discharge mechanism (an attestation entry in `m`, signed by the oracle, whose payload matches the schema) but not the specific kinds an operator must support. operators advertise the schema kinds they implement via capabilities.
 
@@ -150,6 +153,8 @@ implementations may evaluate `tr(K, body)` by trying the key-path before reifyin
 
 evaluation is strict, total, and structural. there is no recursion, iteration, search, or fixpoint; the witness is supplied, not computed. cost is polynomial in `|T|`, `|w|`, and the snapshot data the term references. most node types contribute constant work per evaluation, but `subtree_at` and `cmp` over reflective values (`ast_ref`, `operation_subtree`) cost time proportional to operand size. the worst-case bound is `O(|T| · (|T| + |w|))` for terms heavy in reflective comparisons; for terms without them it is `O(|T|)`.
 
+**cost unit.** reference implementations expose an operator-local cost cap as a non-protocol policy (see §admission). the unit is the AST-node-equivalent evaluation step: every visit to a `B`-term, `V`-term, or proof-obligation node charges 1 unit; structural operations that scan or clone unbounded data (`subtree_at`, `ast_ref`, `operation_subtree`, structural equality of `Subtree`/`List`/`Path`) charge an additional reflective surcharge to keep adversary leverage bounded. the canonical reference value for the reflective surcharge is `8` units. operators publish their cap through the same channel they publish other engagement terms; the cap is not committed in the descriptor, never replayed in fraud proofs (a verifier with a different cap will simply abandon evaluation; the fraud proof does not assert a verdict the original operator's cap necessarily reached), and changing the cap does not change any operation's verdict at the protocol level — it only changes which terms the operator is willing to evaluate.
+
 ## admission
 
 a descriptor is admitted at deposit-open and re-admitted as part of every modification operation that produces a new descriptor. admission runs two checks; failure of either rejects the candidate. both are syntactic, depend on no operation or witness or state, and run in time linear in the descriptor.
@@ -194,7 +199,7 @@ an operator declares its capability set in metadata accessible to wallets at dep
 
 the boolean connectives — `and`, `or`, `not`, `thresh`, `if`, `match`, `cmp` — and the sort/coercion machinery (`prove`, the `with` binder, `branch`) are part of the language core and always available. capabilities apply only to the five gated categories above.
 
-a deposit may open against an operator only if every primitive in its descriptor appears in the operator's set. the protocol fixes a minimum capability set every operator must implement: as proof-obligation forms, `pk`, `pk_threshold`, and `hashlock` with all four hash types (sha256, hash256, ripemd160, hash160); as state predicates, `older` and `after`; as operation types, `spend`; as scheme tags, `wsh`. `tr` is opt-in beyond the minimum. beyond the minimum, capability sets vary across operators.
+a deposit may open against an operator only if every primitive in its descriptor appears in the operator's set. the protocol fixes a minimum capability set every operator must implement: as proof-obligation forms, `pk`, `pk_threshold`, and `hashlock` with all four hash types (sha256, hash256, ripemd160, hash160); as state predicates, `older` and `after`; as operation types, `spend`; as scheme tags, `wsh`. `tr` is opt-in beyond the minimum. `pointlock` is also opt-in beyond the minimum — operators that don't advertise it cannot host descriptors that use it, and wallets that need PTLC privacy on courier hops MUST filter operator candidates by capability. beyond the minimum, capability sets vary across operators.
 
 cosigning quorum members must implement every primitive their operator declares — quorum members verify the operator's evaluations and must run the same evaluator. quorum formation rejects members whose declared implementation does not cover the operator's declared set.
 
