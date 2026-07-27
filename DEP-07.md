@@ -22,6 +22,26 @@ All fee arithmetic uses integer division with floor rounding. Implementations MU
 
 The operator appends `FeeCollect` (disc 50) with the computed fee, which is deducted from the deposit's balance and added to the ledger's `fees_accumulated` counter (see below).
 
+### Assessment baseline and the one-period cap
+
+`blocks_elapsed` is measured from the deposit's `last_fee_assessment`. This is stamped to the deposit's **open block** at `DepositOpen`, and advanced to the collection block on every `FeeCollect`. The op does not carry a block height; the open block comes from the `DepositOpen` update envelope. If that envelope's block height is 0 — a deposit opened during bringup before the operator's wallet had a synced tip — implementations MUST fall back to the ledger's `genesis_block`, so the baseline is never left at 0.
+
+A single `FeeCollect` MUST assess **at most one** `frequency_blocks` period, no matter how many periods have actually elapsed:
+
+    assessed_blocks = min(blocks_elapsed, frequency_blocks)
+    total_fee       = fixed_portion(assessed_blocks) + proportional_portion(assessed_blocks)
+
+`FeeCollect` advances `last_fee_assessment` to the collection block, so any un-assessed remainder is **forgiven, not carried forward**. A deposit that sat dormant — opened-but-unfunded, or whose baseline was somehow never stamped and so appears open since genesis — can therefore never be billed years of backlog in a single sweep. (Without this cap, a deposit with a zero baseline would, on its first funded collection, be charged roughly `current_block / 52560` years of fees at once.)
+
+### Cosigner conformance rules for FeeCollect
+
+Both checks read the **pre-state** deposit (its `balance` and `last_fee_assessment` *before* this op), so every cosigner derives the same bound deterministically from replay. Cosigners MUST reject a `FeeCollect` that violates either:
+
+- **`FeeWindowNotElapsed`** — `block_height < last_fee_assessment + frequency_blocks`. Operators cannot accelerate assessment past the cadence the depositor accepted at open.
+- **`FeeExceedsAssessment`** — `amount` exceeds the one-period assessment due for the pre-state deposit at `block_height` (`amount > calculate_fees_due(pre_state, block_height)`, where `calculate_fees_due` applies the cap above). The operator MAY collect less — rounding, or a partial sweep when the balance can't cover a full period — but never more. This bounds operator over-billing at the consensus layer: cosigners independently recompute the cap and refuse to sign an over-large fee, rather than trusting the amount the operator put in the op.
+
+  **This is a version-gated consensus rule.** It is part of ruleset **`fee-cap-v3`** and activates only once a ledger has been upgraded to it — via a cheap cosigned `QuorumUpgrade` (it shares `cltv-offset-v2`'s reserves-cascade family, so no on-chain rotation is needed) or folded into a `QuorumBegin`. See [DEP-18](DEP-18.md). On ledgers still on an earlier ruleset, cosigners enforce only `FeeWindowNotElapsed` (which predates versioning) and MUST NOT treat an over-cap `FeeCollect` as a confiscation basis — enforcing it pre-upgrade would let an upgraded node fault an honest operator and trip the DEP-06 cascade. The operator-side cap in `calculate_fees_due` is *not* version-gated: collecting less is conforming under every ruleset.
+
 ## Per-Transfer Fees (TransferFeeSchedule)
 
 Each transfer out of a deposit incurs a fee:
@@ -67,7 +87,7 @@ Lock-then-resolve operations (`TransferLock`/`Complete`/`Fail`, `InvoiceLock`/`F
 
 - The **proportional** portion of the fee is zero, since no `amount` was moved.
 - The **fixed** portion (`fixed_msats` from the deposit's current `TransferFeeSchedule`) is charged to the deposit and credited to the operator's `fees_accumulated`.
-- Any locked capacity is otherwise released. For `TransferFail` specifically, the source recovers `amount + proportional_portion` — only `fixed_msats` stays with the operator. For `InvoiceFail` and `OnchainFail`, the locked `amount` is released in full (those ops don't lock an operator fee upfront) and `fixed_msats` is debited from the deposit's balance.
+- Any locked capacity is otherwise released. For `TransferFail` specifically, the source recovers `amount + proportional_portion` — only `fixed_msats` stays with the operator. For `OnchainFail`, the locked `amount` is released in full (no operator fee locked upfront) and `fixed_msats` is debited from the deposit's balance. For `InvoiceFail`, the locked budget — `amount + fee`, where `fee` is the operator's routing+margin budget (see DEP-10 §"Operator-direct pay") — is released in full and only `fixed_msats` is debited: the payment never went out, so the operator incurred no routing and retains no spread.
 
 Implementations MUST use saturating subtraction so that a deposit whose balance dipped below `fixed_msats` between lock and fail does not panic or underflow — in that edge case the operator collects only what the deposit can afford.
 
@@ -82,8 +102,11 @@ Every ledger carries a monotonically non-decreasing `fees_accumulated: u64` coun
 | `TransferFail` | `source.transfer_fees.fixed_msats` |
 | `InvoiceFail` | `deposit.transfer_fees.fixed_msats` |
 | `OnchainFail` | `deposit.transfer_fees.fixed_msats` |
+| `InvoiceFulfill` | `open_invoice_lock.fee` (the depositor-funded routing+margin budget; keep-the-spread) |
 
-`OnchainLock.fee_sats` is a **miner** fee and is NOT accumulated on success or failure. Successful `InvoiceFulfill` and `OnchainFulfill` do not contribute (no operator-fee model on those paths today — `InvoiceLock`/`InvoiceFulfill` is the legacy operator-runs-the-LN-node pay path, kept around for back-compat; the modern bridge-mediated pay flow uses `TransferLock`/`TransferComplete` whose fee is captured under `TransferComplete` above).
+`OnchainLock.fee_sats` is a **miner** fee and is NOT accumulated on success or failure. Successful `OnchainFulfill` does not contribute (no operator-fee model on that path today).
+
+Successful `InvoiceFulfill` **does** contribute the `fee` budget the depositor signed into the `InvoiceLock` (DEP-02 tag 221; DEP-10 §"Operator-direct pay"). On the operator-direct LN pay path the operator pays the BOLT-11 with a routing cap equal to that budget and **keeps the spread** (`fee − actual_routing_fee`) — the same keep-the-spread economics as a bridge's `service_fee`, except here it lands on-ledger in `fees_accumulated` rather than off-ledger. A legacy `InvoiceLock` with no `fee` field contributes nothing on fulfill (back-compat). The bridge-mediated pay flow remains available and uses `TransferLock`/`TransferComplete` whose fee is captured under `TransferComplete` above.
 
 The legacy `InvoiceCredit` op (deterrence-mode receive — DEP-10 §"Offline receive") also doesn't contribute to `fees_accumulated`, since the operator's fee on that path is collected entirely outside the ledger via the spread between LN routing/margin and what they choose to credit. Operators offering this path SHOULD price it conservatively given the lack of cosigner-enforced fee transparency.
 
