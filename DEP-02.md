@@ -159,8 +159,6 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 102 | DormancyNotice | Settlement (DEP-20) |
 | 103 | DormancyAccept | Settlement (DEP-20) |
 | 104 | LedgerWindDown | Settlement (DEP-20) |
-| 105 | DeliveryProposal | Co-signing (DEP-19 §9, proposal hash record) |
-| 106 | CosignRefusal | Co-signing (DEP-19 §9) |
 
 ### Operation TLV Fields
 
