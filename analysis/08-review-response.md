@@ -4,7 +4,7 @@ Reviewer's points, graded against 01–07, with what was changed.
 
 | Point | Status vs our analysis | Action |
 |---|---|---|
-| Vault is a static bond; deposits never enter it; ~2.5 units own capital per unit capacity plus custody of deposits | **New.** We treated reserves as backing without noticing deposits are floated separately | Whitepaper §reserves now states it; viability left as a pricing question |
+| Vault is a static bond; deposits never enter it; own capital is collateral plus courier inventory once deposits fund the vault | **New.** We treated reserves as backing without noticing deposits are floated separately | Whitepaper §reserves now states it; viability left as a pricing question |
 | Rogue Tier 0 spend has no proof type naming the signers | **New, real hole.** We used the fact (06) but never noticed no proof covered it | DEP-06 type 7 "unauthorised vault spend"; DEP-11 collateral maintenance now names every witness signer; DEP-19 §5 cross-references |
 | Punitive never cascades, so waiting converts punitive to respectful | Known (02 §0), not fixed | DEP-06 and DEP-03: punitive shape permitted at any tier once a valid proof exists; a punitive-shaped spend without proof is type 7 |
 | Composition rules checked by the constrained | Known; DEP-19 §10 says so | none |
@@ -19,8 +19,8 @@ Reviewer's points, graded against 01–07, with what was changed.
 Where the review is off:
 
 - "Three units of capital per unit of deposit" counts the deposited coins as the
-  operator's capital. They are the depositors'; the operator's own lock is about
-  2.5 units at 40/60, and it holds the deposits as working liquidity in addition.
+  operator's capital. They are the depositors' and they fund the vault; the operator's own lock is
+  about 1.5 units at 40/60 (collateral) plus courier inventory.
   The viability point stands either way.
 - "A two-of-three majority of anonymous keys chosen by the operator can spend the
   vault" is correct as mechanism, but under DEP-19 §10 the keys are not anonymous

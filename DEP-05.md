@@ -93,7 +93,7 @@ If the operator misbehaves as a **quorum member** on another operator's ledger (
 
 Operators SHOULD run multiple ledgers (recommended: 3-5) with **independent quorums** per ledger. This provides:
 
-1. **Probabilistic safety**: an attacker must compromise all quorums simultaneously to avoid losing collateral. With Q=5 at 33% adversarial, P(all 5 ledgers compromised) < 0.004%.
+1. **Contagion**: misbehaviour proven on one ledger is punishable on every other ledger the operator runs whose quorum holds an honest majority (DEP-19 §5–6). How much this bounds a coalition depends on quorum composition, not on the count of ledgers alone (see §Security Model).
 2. **Partial confiscation**: misbehavior on one ledger triggers slashing on the others, as the honest quorums on remaining ledgers detect and act.
 3. **Capital efficiency**: the same total UTXO is split across ledgers, each with independent security.
 
@@ -143,7 +143,7 @@ Quorum members must maintain a full state replica of any ledger they co-sign for
 1. **Chain continuity**: the update's `previous_hash` matches the member's last validated `chain_hash`
 2. **State validity**: the operation can be applied to the member's local state replica without error (deposit exists, sufficient balance, valid fees, etc.)
 3. **Obligation limits**: the running total of obligations does not exceed reserves
-4. **Collateral preservation**: operations do not reduce the collateral portion below `collateral_amount_msats`
+4. **Collateral preservation**: operations do not reduce the collateral portion below `collateral_amount_msats`; reserves fall only through rotation exits that reduce obligations equally (DEP-20 §3)
 5. **No dispute filed**: the member has not filed a dispute fork for this ledger
 
 If any check fails, the member MUST refuse to co-sign. The chain continuity check (1) is the primary defense against parallel chains — if the operator has published a non-conforming update that the member rejected, subsequent updates will have a different `previous_hash` and the member will refuse.

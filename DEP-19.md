@@ -159,9 +159,9 @@ thereby a duty with the same dereliction proof as local evidence, not a permissi
 - **Degraded rebuild.** A `QuorumBegin` at Tier 1 or Tier 2 MUST stage only pubkeys
   that were active members of the expiring quorum. New members may be added by a
   subsequent Tier 0 rotation once the ledger is re-established.
-- **Tier 3.** An operator spend through the Tier 3 path does not extinguish
-  obligations. Any later ledger the operator runs MAY be disputed under
-  `NonConforming` with the Tier 3 spend and the unpaid obligations as evidence.
+- **Tier 3.** An operator spend through the Tier 3 path to outputs that are not a
+  recorded rotation is an unauthorised vault spend (DEP-06 type 7) and does not
+  extinguish obligations; it is punishable on any later ledger the operator runs.
 - **Wallet exit triggers.** Wallets SHOULD withdraw on any of: quorum size reduced
   below the size at deposit opening; a `QuorumBegin` past `quorum_expiry`; a
   `QuorumInactive` or `QuorumExpired` dispute; a custody change to a winner whose new
@@ -347,20 +347,6 @@ punishable party is punished by a quorum that has both a reward and a duty.
 
 ## Open questions
 
-6. At `Q = 3`, Tier 1 and Tier 2 both collapse to a single member at
-   `quorum_expiry + 720`. A single operator-chosen key taking respectful custody
-   five days after expiry may be acceptable for small ledgers and not for large;
-   a `Q = 3` policy floor on vault size, or a longer Tier 1 offset for `Q = 3`, is
-   left open.
-
-4. §9 makes proposals public before they are canonical. Wallets MUST ignore
-   proposals for balance purposes; relays will carry more traffic. Whether proposals
-   should be gift-wrapped to members and only the *hash* published is a privacy vs.
-   verifiability trade-off left open.
-5. §9 lets an operator generate dereliction pressure by proposing at a high rate.
-   `cosign_response_blocks` bounds the response time, not the count; a per-block
-   proposal cap or a fee to the member per proposal may be needed.
-
 1. Should `inactivity_blocks` be allowed below `service_response_blocks`? A censored
    wallet's proof needs the operator to keep signing; an operator who goes silent to
    dodge a censorship proof should hit the inactivity trigger no later than the
@@ -369,3 +355,17 @@ punishable party is punished by a quorum that has both a reward and a duty.
    in the model.
 3. Whether the no-op `Batch` heartbeat should be fee-free for co-signers or count as
    an operator action for compensation purposes.
+4. §9 makes proposals public before they are canonical. Wallets MUST ignore
+   proposals for balance purposes; relays will carry more traffic. Whether proposals
+   should be gift-wrapped to members and only the *hash* published is a privacy vs.
+   verifiability trade-off left open.
+5. §9 lets an operator generate dereliction pressure by proposing at a high rate.
+   `cosign_response_blocks` bounds the response time, not the count; a per-block
+   proposal cap or a fee to the member per proposal may be needed.
+
+6. At `Q = 3`, Tier 1 and Tier 2 both collapse to a single member at
+   `quorum_expiry + 720`. A single operator-chosen key taking respectful custody
+   five days after expiry may be acceptable for small ledgers and not for large;
+   a `Q = 3` policy floor on vault size, or a longer Tier 1 offset for `Q = 3`, is
+   left open.
+

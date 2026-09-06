@@ -18,7 +18,7 @@ This document specifies fraud proof construction, embedding, broadcast, and veri
 
 6. **Winner collateral deviation**: the lottery winner's broadcast claim TX deviates from the replacement collateral they committed to in `DisputeArmed` — missing the second input, pointing at a different UTXO, committing less than declared, or adding change outputs that drain the pledged amount. Verifiable on-chain by inspecting the claim TX against the disputant's stored `DisputeArmed` declaration.
 
-7. **Unauthorised vault spend**: the reserves UTXO was spent by a Tier 0/1/2 script path to outputs that are neither a `QuorumBegin` rotation recorded on the ledger nor a confiscation transaction backed by a valid dispute. Evidence is the spending transaction, the ledger's latest `QuorumBegin`, and absence of a matching rotation or `DisputeEnter`. Every key whose signature appears in the witness is an accused; the proof is punitive and is presented on each accused's own ledgers. Verifiable by anyone from chain data plus the ledger.
+7. **Unauthorised vault spend**: the reserves UTXO was spent by any script path (Tier 0–3) to outputs that are neither a `QuorumBegin` rotation recorded on the ledger (including its exit, migration, and splice outputs under DEP-20) nor a confiscation transaction backed by a valid dispute. Evidence is the spending transaction, the ledger's latest `QuorumBegin`, and absence of a matching rotation or `DisputeEnter`. Every key whose signature appears in the witness is an accused; the proof is punitive and is presented on each accused's own ledgers. Verifiable by anyone from chain data plus the ledger.
 
 ## Proof Construction
 

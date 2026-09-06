@@ -65,9 +65,19 @@ exit (§3) is always available.
 `locked_balance` and cannot be spent. A request not appended within the window is
 escalated under DEP-12 like any other request.
 
-**Cutoff.** Each `QuorumBegin` carries `exit_cutoff_height`. Every `ExitRequest`
-appended at or before that height, and every escalated request causally visible to
-the operator at or before it (DEP-19 §8), MUST be settled in that rotation.
+**Cutoff.** Each `QuorumBegin` carries `exit_cutoff_height`, which MUST be no
+earlier than the rotation's `block_height − exit_cutoff_margin_blocks` (per-quorum,
+recorded in `QuorumAddMember`, strictest applies, suggested 144). Co-signers refuse
+a rotation whose cutoff is earlier. Every `ExitRequest` appended at or before the
+cutoff, and every escalated request causally visible to the operator at or before
+it (DEP-19 §8), MUST be settled in that rotation.
+
+**Cancellation.** A depositor MAY append `ExitCancel` (signed by the descriptor)
+for a pending request before the cutoff; the operator MUST process it within
+`service_response_blocks` and the locked amount is released. A request MAY carry
+`expires_at_height`; if no rotation settles it by then it is released
+automatically. Depositors who find a swap are therefore never held by their own
+request longer than the cutoff margin.
 
 **Rotation transaction.** The `QuorumBegin` rotation transaction (DEP-03) spends the
 old vault into:
@@ -171,8 +181,13 @@ deposits are migrated together to a receiver that has agreed in advance:
 4. *Rotation.* One output to the receiver's funding address for the manifest
    total; the manifest is recorded in the rotation update. The receiver MUST
    credit each deposit under the same descriptor on confirmation (DEP-10), at
-   terms no worse than in the offer. Failure is `UncreditedOnchainPayment`
-   against the receiver, with the manifest as the offer.
+   the terms in the offer. Only a receiver whose quorum fee floors (DEP-05
+   §Member Terms) are at or below every migrated deposit's schedule MAY accept;
+   its co-signers verify this alongside capacity in step 2, so DEP-05's floor
+   rule is never overridden and the depositor's terms are unchanged. The
+   receiver MAY later use `FeeChange` within each deposit's negotiated limits.
+   Failure to credit is `UncreditedOnchainPayment` against the receiver, with
+   the manifest as the offer.
 
 If no receiver accepts, small bucket deposits stay and continue to pay fees; the
 operator MAY re-offer. No party is obliged to take a bucket.
@@ -191,9 +206,11 @@ deposit is treated as in the bucket: addressable deposits at or above
 `dormancy_amount_msats` are spun out (§8.2), the rest migrated to a receiver
 negotiated under §8.3; remaining obligations are zero; the rotation's "new
 vault" output is to the operator alone, and the ledger is tombstoned. If no receiver
-is available, the final rotation retains a vault sized to the remaining
-obligations at the collateral ratio and passes it to the quorum under the
-respectful custody path (DEP-06). Nothing is forfeited. Wind-down removes the
+is available, the final rotation pays the remaining obligations into a lottery
+output exactly as a respectful confiscation would (DEP-03 §Respectful custody);
+the operator keeps its collateral as change, and the winner posts replacement
+collateral on claim as in any custody transfer. Nothing is forfeited and nothing
+is collateralised twice. Wind-down removes the
 operator, never a balance.
 
 Members are released at the final rotation. This is the intended end of life for a
@@ -227,15 +244,10 @@ locks), DEP-10 (withdrawal, superseded in part), DEP-11 (obligations), DEP-12
 
 ## Open questions
 
-4. Whether wind-down should require member co-signature beyond the rotation
-   itself. With the operator paying forced-exit fees, no forfeiture, and a long
-   notice, the operator's only unilateral power is to end its own service on a
-   long clock at its own cost, which is judged sufficient; recorded for review.
-
 1. Minimum rotation interval. A very short interval makes exit fast but multiplies
    on-chain cost and co-signing load; a quorum-negotiated `max_rotation_interval`
    may belong in `QuorumAddMember`.
-2. Whether `ExitRequest` should carry an expiry so that a depositor who finds a swap
-   in the meantime can release the lock.
-3. Fee attribution for exit outputs: pro-rata from the exiting deposits, or borne
-   by the operator as a cost of the rotation.
+2. Whether wind-down should require member co-signature beyond the rotation
+   itself. With the operator paying forced-exit fees, no forfeiture, and a long
+   notice, the operator's only unilateral power is to end its own service on a
+   long clock at its own cost, which is judged sufficient; recorded for review.

@@ -153,6 +153,14 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 56 | DisputeYield | Dispute |
 | 57 | DisputeArmed | Dispute |
 | 80 | DeliveryEmbed | Delivery |
+| 90 | Batch | Batch |
+| 100 | ExitRequest | Settlement (DEP-20) |
+| 101 | ExitCancel | Settlement (DEP-20) |
+| 102 | DormancyNotice | Settlement (DEP-20) |
+| 103 | DormancyAccept | Settlement (DEP-20) |
+| 104 | LedgerWindDown | Settlement (DEP-20) |
+| 105 | DeliveryProposal | Co-signing (DEP-19 §9, proposal hash record) |
+| 106 | CosignRefusal | Co-signing (DEP-19 §9) |
 
 ### Operation TLV Fields
 

@@ -83,7 +83,7 @@ When a quorum is established or refreshed, the operator constructs a new Taproot
 - **quorum_member_ledger_ids**: parallel array to `quorum_members` carrying each member's own ledger_id (the ledger holding their collateral, sourced from the matching `QuorumAddMember.member_ledger_id`). Lets fraud-proof verifiers and explorers identify the ledger backing each cosigner's `member_ledger_hash` without re-deriving the mapping from prior `QuorumAddMember` history. Older `QuorumBegin` events omit this field; consumers fall back to walking `QuorumAddMember` operations on the operator's ledger.
 - **quorum_expiry**: block height when the quorum expires (shortest member commitment)
 
-The on-chain UTXO value MUST equal `reserves_amount + collateral_amount`. Cosigners MUST verify, against their own chain source, that the referenced outpoint (`new_outpoint_txid`, `new_outpoint_vout`):
+The on-chain UTXO value MUST equal `reserves_amount + collateral_amount`. A rotation MAY carry exit outputs and a splice-in input (DEP-20 §3–4); the new vault's value is then `old vault + splice_in − Σ exits − fee`, with `reserves_amount` reduced by `Σ exits` and obligations reduced by the same amount in the recording update. Cosigners MUST verify, against their own chain source, that the referenced outpoint (`new_outpoint_txid`, `new_outpoint_vout`):
 
 1. exists on-chain,
 2. is unspent,

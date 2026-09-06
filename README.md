@@ -19,7 +19,7 @@ bitcoin deposits is a protocol similar to custodial lightning, but:
 - wants to make yield on her bitcoin
 - chooses 3 or 5 established nodes to form a quorum
 - spends R into a multisig of this quorum
-- acts like a bank, with total deposits up to R/2
+- acts like a bank, with total deposits up to the reserves portion of the vault
 - collects fees on balances and transactions
 - can participate in other quorums
 

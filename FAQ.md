@@ -1,7 +1,7 @@
 ## intro
 i've spent the last year designing a distributed bitcoin layer 2. i can't bring myself to give it some fancy name, so it's called "bitcoin deposits"
 
-there's no mining, just staked funds covering the obligations of a cryptographic ledger validated by peer nodes. simple wallets are 12 words, miniscript is available for multisig. you can be offline as long as you want and still receive payments. if your ledger's operator goes offline or rogue, another operator will honor your claims when you come back
+there's no mining, just staked funds covering the obligations of a cryptographic ledger validated by peer nodes. simple wallets are 12 words, miniscript is available for multisig. you can be offline as long as you want; receiving while offline uses a custodial path the wallet must opt into, receiving while online is atomic. if your ledger's operator goes offline or rogue, another operator will honor your claims when you come back
 
 it's currently untested, but appears sound. per ledger it is a bonded custodian supervised by a small quorum the operator chose, with on-chain succession; it asks for more trust than ark or spark, which keep unilateral exit, and a different kind than liquid's named federation. what it offers instead is provable fraud, a slashable bond, and custody that survives the operator, at lightning-like cost and with no channel management. it requires full transparency, so there's no inherent privacy. wallets are cheap/free and funds are liquid. all communication is over nostr relays, so only the relay knows your ip address
 

@@ -21,8 +21,8 @@ Without the preimage, this obligation is not autonomously provable.
 ### Transfer Timeout
 When a `TransferLock` is appended with a `timeout_height`, the operator must append `TransferFail` after the timeout block is reached if no `TransferComplete` has been provided. Signing updates past `timeout_height` while funds remain locked is provable non-conformance.
 
-### Withdrawal and Transfer Processing
-When a wallet's signed request is not processed by the operator, the wallet may escalate through certified delivery (see DEP-12). A quorum member embeds the request hash in their own ledger via `DeliveryEmbed`. The `service_response_blocks` clock starts at the embed's `block_height`. If the operator's ledger advances past the deadline without a corresponding operation, the combination constitutes a censorship proof.
+### Transfer and Exit-Request Processing
+On-chain withdrawal is not an obligation (DEP-20 §1); the obligations here are ledger-internal requests and `ExitRequest` acceptance. When a wallet's signed request is not processed by the operator, the wallet may escalate through certified delivery (see DEP-12). A quorum member embeds the request hash in their own ledger via `DeliveryEmbed`. The `service_response_blocks` clock starts at the embed's `block_height`. If the operator's ledger advances past the deadline without a corresponding operation, the combination constitutes a censorship proof.
 
 `service_response_blocks` is a per-quorum parameter recorded in `QuorumAddMember`. The strictest value across all members applies.
 
@@ -53,10 +53,10 @@ When valid fraud evidence is embedded in the causal chain and a quorum member's 
 `dispute_response_blocks` is a per-quorum parameter recorded in `QuorumAddMember`, so all parties agree on the obligation at join time. Shorter values increase responsiveness requirements; longer values are more forgiving but delay recovery.
 
 ### History Service
-A member MUST retain the full update history of every ledger it co-signs for and MUST serve it on request (DEP-04 `ledger_history`). Relays are a cache, not the record. Refusal is not slashable but is observable and is the same signal as a refused embed (DEP-12).
+A member MUST retain the full update history of every ledger it co-signs for and MUST serve it on request (DEP-04 §Request Actions, `ledger_history`). Relays are a cache, not the record. Refusal is not slashable but is observable and is the same signal as a refused embed (DEP-12).
 
 ### Collateral Maintenance
-The collateral portion of the operator's UTXO must be preserved through `quorum_expiry`. Co-signers MUST reject any operation that would reduce the UTXO value below `reserves_amount_msats + collateral_amount_msats`. If the UTXO is spent by any script path to outputs that are not a recorded rotation or a proof-backed confiscation, every signer in the witness is accused under DEP-06 proof type 7. This covers the operator's solo path and a quorum majority spending to itself alike.
+The collateral portion of the operator's UTXO must be preserved through `quorum_expiry`. Co-signers MUST reject any operation that would reduce the UTXO value below `reserves_amount_msats + collateral_amount_msats`, except a `QuorumBegin` whose exit outputs reduce reserves and obligations by the same amount (DEP-20 §3). If the UTXO is spent by any script path to outputs that are not a recorded rotation or a proof-backed confiscation, every signer in the witness is accused under DEP-06 proof type 7. This covers every script path, the operator's solo path included, and a quorum majority spending to itself alike.
 
 ## Wallet Obligations
 
@@ -76,7 +76,8 @@ Wallets should distribute funds across operators with non-overlapping quorum mem
 | On-chain credit | Operator signs past `deadline_block` without credit | Yes (autonomous) |
 | Lightning credit | Preimage exists, no credit | Yes (with preimage) |
 | Transfer timeout | Operator signs past `timeout_height` with funds locked | Yes |
-| Withdrawal/transfer processing | Operator signs past `DeliveryEmbed block_height + service_response_blocks` without processing embedded request | Yes |
+| Transfer / exit-request processing | Operator signs past `DeliveryEmbed block_height + service_response_blocks` without processing embedded request | Yes |
+| Exit inclusion | Rotation omits an `ExitRequest` due under its cutoff (DEP-20 §3) | Yes (`NonConforming` against signers) |
 | Quorum rotation | Operator signs a value-moving update past `quorum_expiry` without a subsequent `QuorumBegin` | Yes |
 | Activity | No co-signed update for `inactivity_blocks` | Attested by quorum majority (respectful) |
 | Dispute response | Member active after `evidence_block + dispute_response_blocks` | Yes |

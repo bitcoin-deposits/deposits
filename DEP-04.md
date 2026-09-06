@@ -102,6 +102,9 @@ Wallets send ephemeral Kind 20101 events to operator relays. The content is JSON
 | forfeit_sweep_sign | Request co-signature on a forfeit-sweep TX (arm-and-reveal forfeiture) | DEP-06 |
 | issue_hold_invoice | Ask a bridge for a hold invoice against a wallet-supplied hash | DEP-10 |
 | quote_invoice | Ask a bridge for a per-invoice pay quote | DEP-10 |
+| ledger_history | Ask a member for a ledger's update history from a sequence | DEP-11 |
+| exit_request | Submit a signed `ExitRequest` for rotation exit | DEP-20 |
+| exit_cancel | Cancel a pending `ExitRequest` before the cutoff | DEP-20 |
 
 ### Response Format
 
@@ -163,7 +166,8 @@ A guarantee matrix is a list of `(regime, amount-range, shape, honesty, time-pro
 | Regime | Meaning |
 |---|---|
 | `onchain_credit` | Wallet sends bitcoin on-chain; operator credits the deposit after confirmations. |
-| `onchain_withdraw` | Wallet asks the operator to broadcast a withdrawal to a wallet-controlled address. |
+| `onchain_withdraw` | Legacy name for `onchain_swap`; treated identically. |
+| `onchain_swap` | Wallet exits to an on-chain address by hash-locked swap against a courier's external liquidity (DEP-20 §2). `shape: settlement_atomic`, `honesty: bridge_only`. The row carries the courier's advertised capacity. Absence means no fast on-chain exit; rotation exit (DEP-20 §3) is always available. |
 | `invoice_receive` | Wallet receives a Lightning payment via the HTLC-bridge model (DEP-10 §Receive). The wallet picks any bridge offering this service (the operator itself, or any third-party deposit holder with an LN node), generates the preimage, hands the bridge only the hash. The bridge issues a hold invoice; the on-ledger `TransferLock` is structurally bound to the upstream HTLC. Always `shape: settlement_atomic`, `honesty: bridge_only` — the bridge cannot claim upstream without the preimage appearing in a cosigned ledger record. The operator advertising this row asserts that their ledger supports the bridge mechanic (when-supplied BOLT-11 aux verification in the cosignature flow — DEP-10 §"Bridge cosigner rules"); it does NOT mean the operator itself is the bridge. |
 | `invoice_receive_legacy_deterrence` | Wallet receives a Lightning payment via the operator-held-preimage path (DEP-10 §"Offline receive"): operator's LN node holds the preimage and commits `InvoiceCredit` unilaterally. `shape: deterrence`, `honesty: operator_only`. Provided for offline-receive use cases (LNURL gateways, permanent-cold-storage deposits) where the wallet cannot come online during the HTLC window. Wallets seeking the atomic path MUST refuse operators that only advertise this row. |
 | `invoice_pay` | Wallet pays a Lightning invoice via a bridge (DEP-10 §Pay). The wallet locks the (invoice amount + bridge service fee) to the bridge's deposit via a standard `TransferLock`; the bridge pays the invoice via LDK and `TransferCompletes` revealing the preimage. `shape: settlement_atomic` for the locking step; actual payment outcome still subject to LN reachability (lock times out and refunds if the bridge fails to route). Bridges set their own service fees per invoice or per published schedule; this DEP-04 row asserts the operator's ledger supports the bridge mechanic, not that the operator itself runs a bridge. |
@@ -411,6 +415,7 @@ The protocol's guarantees to a depositor hold only if the wallet performs the fo
 5. After a dispute, accept a new custodian only once the lottery claim transaction is confirmed (DEP-06 §Recovery).
 6. Withdraw on any of: quorum size below that at opening, a `QuorumBegin` past `quorum_expiry`, an inactivity or expiry dispute, or a custody change to a quorum the wallet has not evaluated (DEP-19 §7).
 7. Compare `created_at` on replaceable events against the last known version before honouring a subkey or advertisement change.
+8. On return after absence, check the ledger for a `DormancyNotice` or `LedgerWindDown` naming the wallet's deposits; if migrated, locate the receiver ledger from the manifest, verify the credit under the same descriptor, and update the wallet's deposit list (DEP-20 §8–9).
 
 These are requirements on wallet software; depositors are not expected to perform them.
 
