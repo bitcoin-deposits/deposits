@@ -44,3 +44,44 @@ operator's advertised swap capacity so wallets can price it.
 - WHITEPAPER §deposits: "an operator must allow transfers between deposits on the
   same ledger as well as on-chain exits" becomes "…and must process swap locks; exit
   liquidity is provided by couriers, including the operator's own".
+
+## Cold start improves
+
+A new operator self-fills, then swaps a slice of its own balance for market-priced
+balance on an established ledger through a courier. It now holds inventory on both,
+which is a channel between the ledgers with no on-chain step. The courier graph
+grows by trade rather than by capital.
+
+## Exit floor: rotation exit
+
+Fast exit is a swap. Slow exit is paid from the vault, which already holds
+reserves at least equal to obligations and is spendable by the quorum.
+
+- A depositor signs an **exit request** (amount, on-chain address). It is delivered
+  to the operator or, on refusal, embedded via DEP-12 so it becomes causally visible.
+- The operator MUST include every exit request visible before a published cutoff in
+  the next `QuorumBegin` rotation transaction: one output per request (batched, dust
+  aggregated), the new vault reduced by the total, and the ledger update recording
+  the rotation debiting the deposits by the same amounts. Reserves and obligations
+  fall together, so the reserves-fraction invariant holds.
+- Co-signers verify the rotation's outputs against the visible requests and MUST
+  refuse a rotation that omits one. An operator who rotates without them, or lets
+  the cycle pass, is censoring under the `service_response_blocks` clock; custody
+  transfer puts the requests before a new operator, who includes them in the
+  acquisition rotation.
+- The operator MAY run an off-cycle exit batch (a co-signed rotation to the same
+  member set) when requests warrant.
+
+Shape: cooperative close now, force close on a timer, as in lightning. The timer is
+the rotation cycle plus, if resisted, the escalation and dispute windows. Liquidity
+is never the operator's problem; deposit-funded vault capital leaves with the
+deposits that funded it. A run appears as a large rotation, not a liquidity crisis.
+Depositors who need coins in hours use the swap market.
+
+## Spec changes implied (additional)
+
+- DEP-03 `QuorumBegin`: optional `exit_outputs` list; UTXO value check becomes
+  `old vault − exits − fee`.
+- DEP-02: `ExitRequest` operation (or a `DeliveryEmbed` target) and the debit
+  recorded in the rotation update.
+- DEP-11: "Exit inclusion" obligation, provable as censorship.
