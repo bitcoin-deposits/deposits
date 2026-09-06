@@ -147,6 +147,11 @@ verify dormancy and notice from the ledger.
 spun out; the fixed fee drains them and the operator closes them at zero. The
 floor is set by the fee market, not by the spec. Suggested `dust_multiple` 10.
 
+**Who pays.** The initiator of an exit pays its output fee. A depositor's
+`ExitRequest` is debited its output's share of the rotation fee; a dormancy exit or
+wind-down output is paid in full and its fee is borne by the operator. Timing a
+forced exit into high fees therefore costs the operator, not the depositor.
+
 ### 9. Wind-down
 
 An operator MAY close a ledger by appending `LedgerWindDown` with a final rotation
@@ -155,8 +160,12 @@ period the operator MUST continue to process requests. At the final rotation eve
 deposit above the dust floor with an addressable descriptor is spun out under §8
 rules regardless of dormancy; remaining obligations are zero; the rotation's "new
 vault" output is to the operator alone, and the ledger is tombstoned. Deposits with
-no addressable descriptor MUST move by swap or transfer during the notice period;
-any residue is forfeited to the operator and is stated as such in the notice.
+no addressable descriptor SHOULD move by swap or transfer during the notice period.
+Any that remain are NOT forfeited: the final rotation retains a vault sized to
+their obligations at the collateral ratio, and that vault passes to the quorum
+under the respectful custody path (DEP-06); one member takes the remainder by
+lottery and inherits those deposits. Wind-down removes the operator, never a
+balance.
 
 Members are released at the final rotation. This is the intended end of life for a
 ledger whose activity no longer justifies its quorum; the alternative, letting it
@@ -190,8 +199,9 @@ locks), DEP-10 (withdrawal, superseded in part), DEP-11 (obligations), DEP-12
 ## Open questions
 
 4. Whether wind-down should require member co-signature beyond the rotation
-   itself, to stop an operator closing a healthy ledger against its depositors'
-   interest; the notice period plus swap availability may be enough.
+   itself. With the operator paying forced-exit fees, no forfeiture, and a long
+   notice, the operator's only unilateral power is to end its own service on a
+   long clock at its own cost, which is judged sufficient; recorded for review.
 
 1. Minimum rotation interval. A very short interval makes exit fast but multiplies
    on-chain cost and co-signing load; a quorum-negotiated `max_rotation_interval`
