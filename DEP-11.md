@@ -28,8 +28,14 @@ When a wallet's signed request is not processed by the operator, the wallet may 
 
 Without this obligation, an operator could hold deposits hostage — refusing to process withdrawals without it being non-conforming. This is the provable service-level guarantee.
 
+### Defence against manufactured lateness
+Members who co-sign other updates while withholding the one that satisfies a clock (a credit, a `TransferFail`, an escalated request) can make an operator provably late. An operator SHOULD NOT sign any update whose `block_height` would complete a proof against them while the required operation is un-cosigned; stalling is respectful and returns collateral, signing is punitive. The withheld co-signature is provable under DEP-19 §9.
+
 ### Fee Collection
 Fee collection is at the operator's discretion within the `frequency_blocks` period. Skipping or delaying collection is not non-conforming — it reduces operator revenue but does not affect depositor funds. Quorum members may decline to co-sign for operators who do not collect fees, as uncollected fees create accounting discrepancies.
+
+### Activity
+An operator whose ledger has had no co-signed update for `inactivity_blocks` (DEP-19) may have custody moved by a quorum majority through the respectful path. Silence is not non-conforming and returns collateral, but it is not free of consequence: the ledger is reassigned. The operator can always break silence with `FeeCollect`, a self-transfer, or an empty batch.
 
 ### Quorum Rotation
 The operator should append a new `QuorumBegin` before `quorum_expiry` to keep the full strict-majority cosign protection active. Signing **value-moving** updates after `quorum_expiry` without a new `QuorumBegin` is non-conforming — the operator is operating without the bilateral agreement the protocol requires. This is provable: any co-signed value-moving update with `block_height >= quorum_expiry` on a ledger without a subsequent `QuorumBegin` constitutes evidence.
@@ -46,8 +52,11 @@ When valid fraud evidence is embedded in the causal chain and a quorum member's 
 
 `dispute_response_blocks` is a per-quorum parameter recorded in `QuorumAddMember`, so all parties agree on the obligation at join time. Shorter values increase responsiveness requirements; longer values are more forgiving but delay recovery.
 
+### History Service
+A member MUST retain the full update history of every ledger it co-signs for and MUST serve it on request (DEP-04 `ledger_history`). Relays are a cache, not the record. Refusal is not slashable but is observable and is the same signal as a refused embed (DEP-12).
+
 ### Collateral Maintenance
-The collateral portion of the operator's UTXO must be preserved through `quorum_expiry`. Co-signers MUST reject any operation that would reduce the UTXO value below `reserves_amount_msats + collateral_amount_msats`. If the operator spends the UTXO outside the quorum's control (e.g., via a tiered timeout path) before quorum expiry, this is provable non-conformance.
+The collateral portion of the operator's UTXO must be preserved through `quorum_expiry`. Co-signers MUST reject any operation that would reduce the UTXO value below `reserves_amount_msats + collateral_amount_msats`. If the UTXO is spent by any script path to outputs that are not a recorded rotation or a proof-backed confiscation, every signer in the witness is accused under DEP-06 proof type 7. This covers the operator's solo path and a quorum majority spending to itself alike.
 
 ## Wallet Obligations
 
@@ -58,7 +67,7 @@ Wallets should retain cosigned offers and invoices until the corresponding credi
 Wallets should periodically verify co-signatures on ledger updates. When co-signatures are absent or invalid, the wallet should query for dispute events and replay history to identify custody changes.
 
 ### Fund Distribution
-Wallets should distribute funds across operators with non-overlapping quorum members. A deposit is only as available as its operator.
+Wallets should distribute funds across operators with non-overlapping quorum members. A deposit is only as available as its operator, and the protocol bounds a hold only by `inactivity_blocks` (majority live) or the expiry tiers (fewer live). Distribution is the depositor's defence against unavailability; it is advice, and it does not help against members who fail together.
 
 ## Timeline Summary
 
@@ -69,6 +78,7 @@ Wallets should distribute funds across operators with non-overlapping quorum mem
 | Transfer timeout | Operator signs past `timeout_height` with funds locked | Yes |
 | Withdrawal/transfer processing | Operator signs past `DeliveryEmbed block_height + service_response_blocks` without processing embedded request | Yes |
 | Quorum rotation | Operator signs a value-moving update past `quorum_expiry` without a subsequent `QuorumBegin` | Yes |
+| Activity | No co-signed update for `inactivity_blocks` | Attested by quorum majority (respectful) |
 | Dispute response | Member active after `evidence_block + dispute_response_blocks` | Yes |
 | Collateral maintenance | UTXO reduced below reserves + collateral | Yes |
 | Fee collection | Within `frequency_blocks` | No (advisory) |
@@ -85,6 +95,7 @@ The following timing parameters are recorded in `QuorumAddMember` so that all pa
 | `dispute_arm_blocks` | Blocks after `DisputeEnter` during which members must arm | 144 (~1 day) |
 | `service_response_blocks` | Blocks before an unprocessed signed request becomes provable censorship | 72 (~12 hours) |
 | `max_transfer_timeout_blocks` | Maximum `timeout_height` distance for `TransferLock` | 1008 (~1 week) |
+| `inactivity_blocks` | Blocks without a co-signed update before a majority may attest inactivity (DEP-19) | 144 (~1 day) |
 
 ## Related DEPs
 

@@ -3,7 +3,7 @@ i've spent the last year designing a distributed bitcoin layer 2. i can't bring 
 
 there's no mining, just staked funds covering the obligations of a cryptographic ledger validated by peer nodes. simple wallets are 12 words, miniscript is available for multisig. you can be offline as long as you want and still receive payments. if your ledger's operator goes offline or rogue, another operator will honor your claims when you come back
 
-it's currently untested, but appears sound. it should require less trust and scale better than ark / spark / liquid. it requires full transparency, so there's no inherent privacy. wallets are cheap/free and funds are liquid. all communication is over nostr relays, so only the relay knows your ip address
+it's currently untested, but appears sound. per ledger it is a bonded custodian supervised by a small quorum the operator chose, with on-chain succession; it asks for more trust than ark or spark, which keep unilateral exit, and a different kind than liquid's named federation. what it offers instead is provable fraud, a slashable bond, and custody that survives the operator, at lightning-like cost and with no channel management. it requires full transparency, so there's no inherent privacy. wallets are cheap/free and funds are liquid. all communication is over nostr relays, so only the relay knows your ip address
 
 current state: 100% me running everything. hoping to shake out the remaining bugs and fan things out soon
 
@@ -13,7 +13,7 @@ a: the basic construction is that the operator updates the ledger, but a quorum 
 
 if quorum members themselves are dishonest or do not reassign reserves in a timely manner, the quorums on their own ledgers will find out, and confiscate their collateral and reassign their reserves
 
-the essential question is: for how many layers does this scale? from my analyses and simulations, it's more than you'd think
+the essential question is: for how many layers does this scale? the honest answer is that collateral alone does not bound an organised coalition; quorum composition does. a coalition must fill every seat an operator did not anchor with someone they trust. the protocol makes composition visible and gives everyone the same record to judge it by
 
 ## q: how does the quorum reassign ledgers?
 

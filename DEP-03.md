@@ -36,7 +36,7 @@ For a quorum of n members:
 | Tier | Signers | Timelock | Purpose |
 |---|---|---|---|
 | 0 | Majority of quorum (no operator) | None — anytime | Normal operations: rotation, co-signed settlements |
-| 1 | Minority of quorum (no operator) | `quorum_expiry + 720` blocks (~5 days) | Degraded quorum recovery when members disappear |
+| 1 | Minority of quorum, `floor(n/2)` members (no operator) | `quorum_expiry + 720` blocks (~5 days) | Degraded quorum recovery when members disappear |
 | 2 | Single quorum member (no operator) | `quorum_expiry + 4032` blocks (~4 weeks) | Recovery when only one member remains active |
 | 3 | Operator only | `quorum_expiry + 8064` blocks (~8 weeks) | Operator solo, last resort after all quorum paths failed |
 
@@ -159,6 +159,8 @@ propagation:
 | `DisputeDereliction`  | Punitive    | Cosigner was online but failed to act on a prior fraud proof within the window     |
 | `NonConformingUpdate` | Punitive    | Operator signed a ledger update that violates protocol rules                       |
 | `WinnerCollateralDeviation` | Punitive | Lottery winner's broadcast claim TX deviates from their `DisputeArmed` collateral declaration (missing input, smaller commit, or extra drain) |
+
+Punitive shape is available at every tier once a valid punitive proof exists (DEP-06 §Respectful vs Punitive); the tiers gate who may spend, not which shape they may build.
 
 ### Respectful custody (QuorumExpired only)
 

@@ -85,7 +85,7 @@ Both live in the same Taproot output, controlled by the same quorum via tiered s
 
 ### Slashing
 
-When the operator is proven non-conforming (see DEP-06), the quorum confiscates the entire UTXO. The collateral portion is the operator's real loss — deposits are owed back to depositors. The lottery winner (see DEP-03) takes over the ledger and inherits obligations; the slashed value (excess reserves + the operator's full collateral) is split equally among the `Q` cosigners, and the winner provides *replacement* collateral on lottery claim. Operating a ledger is a service commitment, not a windfall — the winner's economics post-takeover are roughly neutral, and the slashing reward is shared evenly so every cosigner is uniformly incentivized to dispute.
+When the operator is proven non-conforming (see DEP-06), the quorum confiscates the entire UTXO. The collateral portion is the operator's real loss — deposits are owed back to depositors, and reserves not covering obligations are the operator's own funds (an operator may hold deposits on their own ledger, so excess reserves are not a dependable penalty). The lottery winner (see DEP-03) takes over the ledger and inherits obligations; the slashed value (excess reserves + the operator's full collateral) is split equally among the `Q` cosigners, and the winner provides *replacement* collateral on lottery claim. Operating a ledger is a service commitment, not a windfall — the winner's economics post-takeover are roughly neutral, and the slashing reward is shared evenly so every cosigner is uniformly incentivized to dispute.
 
 If the operator misbehaves as a **quorum member** on another operator's ledger (e.g., co-signs a non-conforming update), proof of this misbehavior can be presented to the misbehaving member's own quorum, triggering slashing on their own ledger.
 
@@ -113,6 +113,8 @@ Each deposit has two fields:
 Per-deposit spendable funds are `available_balance = balance - locked_balance`. Locking funds for an in-flight operation does not change the deposit's `balance` or the ledger's total obligation — the funds were already counted. Only settlement (credit/debit/fulfill) changes `balance`.
 
 ### Security Model
+
+The Tier 0 spending path (DEP-03) is a quorum majority without the operator. This is what makes confiscation possible, and it means a quorum majority custodies the operator's entire vault. The arithmetic below bounds what a coalition gains from *ledgers it operates*; it does not bound theft of honest operators' vaults by a coalition holding a quorum majority, nor the case where the signing keys hold no slashable collateral. Those are bounded by quorum composition (DEP-19 §10) rather than by collateral. The simulation results assume wallets deposit only on honest operators and that colluding operators expose every key.
 
 Consider an operator with UTXO = U, reserves fraction R, collateral fraction C = 1-R:
 

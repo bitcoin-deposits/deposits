@@ -18,6 +18,8 @@ This document specifies fraud proof construction, embedding, broadcast, and veri
 
 6. **Winner collateral deviation**: the lottery winner's broadcast claim TX deviates from the replacement collateral they committed to in `DisputeArmed` — missing the second input, pointing at a different UTXO, committing less than declared, or adding change outputs that drain the pledged amount. Verifiable on-chain by inspecting the claim TX against the disputant's stored `DisputeArmed` declaration.
 
+7. **Unauthorised vault spend**: the reserves UTXO was spent by a Tier 0/1/2 script path to outputs that are neither a `QuorumBegin` rotation recorded on the ledger nor a confiscation transaction backed by a valid dispute. Evidence is the spending transaction, the ledger's latest `QuorumBegin`, and absence of a matching rotation or `DisputeEnter`. Every key whose signature appears in the witness is an accused; the proof is punitive and is presented on each accused's own ledgers. Verifiable by anyone from chain data plus the ledger.
+
 ## Proof Construction
 
 A fraud proof is a hashable evidence document:
@@ -143,10 +145,16 @@ The script supports up to N=15 disputants, but the operational policy in this re
 - The amount covering the ledger's obligations goes to the lottery output (the winner inherits those obligations against that backing)
 - The remainder (excess reserves + full collateral) is split equally across the **armers** (DisputeArmed participants), one per-armer slashing-share output. Non-armers get no slice — arming is the gate to a share, revealing is the gate to keeping it (see §"Arm-and-reveal forfeiture" below).
 - If the operator runs multiple ledgers, proof of non-conformance on one ledger can be presented to the other ledgers' quorums, triggering slashing there as well
-- Punitive disputes operate at strict majority; they do not cascade
-  through the lifecycle tiers because the misbehaviour is provable
-  *now* — the protocol does not wait for cosigners to vanish before
-  acting on a non-conforming update.
+- Punitive disputes operate at strict majority in Tier 0. Past
+  `quorum_expiry`, a valid punitive proof MAY be executed by whichever
+  subset the current tier admits (minority at Tier 1, single member at
+  Tier 2) using the punitive transaction shape. The proof is verifiable
+  by anyone, so a smaller signer set does not weaken it; what the tiers
+  gate is authority to spend, not the classification. A tier-path
+  spend with punitive shape and no valid proof is itself an
+  unauthorised vault spend (proof type 7). Without this, a majority
+  that is complicit or absent converts every punitive outcome into a
+  respectful one by waiting.
 
 ##### Arm-and-reveal forfeiture
 

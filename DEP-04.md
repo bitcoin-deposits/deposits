@@ -400,6 +400,20 @@ Both inputs are fetched independently of the operator's own Kind 39100 advertise
 
 Explorer UIs that surface "quorum status" badges SHOULD use the same derivation so the operator's self-reported `quorum_state` cannot mask an actually-expired quorum.
 
+## Conforming Wallet Checks
+
+The protocol's guarantees to a depositor hold only if the wallet performs the following. A wallet that omits any of them can be defrauded without any protocol participant misbehaving provably.
+
+1. Accept a ledger reply only with a strict-majority cosignature (DEP-05), verified against the active member set of the latest `QuorumBegin`.
+2. Walk the ledger's hash chain from at least two relays and treat a gap as unknown, not as absence.
+3. Apply the pre-open quorum-freshness check above, and refuse a ledger whose latest establishment update is non-conforming (DEP-19 §10).
+4. Retain cosigned offers until credited or expired (DEP-11).
+5. After a dispute, accept a new custodian only once the lottery claim transaction is confirmed (DEP-06 §Recovery).
+6. Withdraw on any of: quorum size below that at opening, a `QuorumBegin` past `quorum_expiry`, an inactivity or expiry dispute, or a custody change to a quorum the wallet has not evaluated (DEP-19 §7).
+7. Compare `created_at` on replaceable events against the last known version before honouring a subkey or advertisement change.
+
+These are requirements on wallet software; depositors are not expected to perform them.
+
 ## Wallet Identity and NIP-07
 
 Wallets derive a Nostr keypair from their BIP-39 seed at derivation path `m/84'/0'/0'/0/0`. This key signs requests (Kind 20101) and verification events (Kind 25500).
