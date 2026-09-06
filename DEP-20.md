@@ -140,8 +140,7 @@ never selects accounts.
 **Parameters** (per quorum, recorded in `QuorumAddMember`, strictest applies):
 `dormancy_blocks` (suggested 26280, ~6 months), `dormancy_amount_msats`
 (suggested 10 × 34 vB × a reference feerate, revisable at rotation),
-`dormancy_notice_blocks` (suggested 2016), and each member's signed
-`dormancy_receiver` acceptance (§8.3).
+`dormancy_notice_blocks` (suggested 2016).
 
 **8.1 Selection.** The operator appends `DormancyNotice` naming a rotation height
 at least `dormancy_notice_blocks` ahead. At that rotation every deposit with no
@@ -153,15 +152,30 @@ that includes a deposit outside the bucket or omits one inside it.
 whose descriptor yields a bitcoin address are spun out as exit outputs (§3), full
 balance, output fee borne by the operator.
 
-**8.3 Small, or non-addressable.** All other bucket deposits are migrated together:
-one output to the funding address of a quorum member who signed
-`dormancy_receiver` at join, and a **manifest** in the rotation update listing each
-deposit's id, balance, and descriptor. The receiver MUST credit each deposit under
-the same descriptor on confirmation (DEP-10 credit rules), at fee terms no worse
-than its own floors, which the deposits already satisfy. Failure to credit is
-`UncreditedOnchainPayment` against the receiver on its own ledger, with the
-manifest as the offer. If no member signed as receiver, small bucket deposits are
-not moved. The receiver bears no fee; the operator pays the single output.
+**8.3 Small, or non-addressable: negotiated migration.** All other bucket
+deposits are migrated together to a receiver that has agreed in advance:
+
+1. *Offer.* Before any notice, the operator publishes `DormancyOffer` (Kind
+   9110): manifest hash, deposit count, total balance, the fee terms the deposits
+   carry, and any premium the operator will pay the receiver. Members and other
+   operators MAY respond.
+2. *Accept.* A receiver appends `DormancyAccept` to its own ledger naming the
+   offer. Its co-signers MUST verify that the receiver's obligations plus the
+   manifest total fit within its reserves, and refuse otherwise. The receiver MAY
+   splice the incoming coins into its vault at its next rotation (§4) to restore
+   headroom.
+3. *Notice.* The operator then appends `DormancyNotice` naming the receiver and
+   manifest and starting `dormancy_notice_blocks`. Deposits that show activity
+   before the rotation are removed from the manifest; the accept covers the
+   reduced total.
+4. *Rotation.* One output to the receiver's funding address for the manifest
+   total; the manifest is recorded in the rotation update. The receiver MUST
+   credit each deposit under the same descriptor on confirmation (DEP-10), at
+   terms no worse than in the offer. Failure is `UncreditedOnchainPayment`
+   against the receiver, with the manifest as the offer.
+
+If no receiver accepts, small bucket deposits stay and continue to pay fees; the
+operator MAY re-offer. No party is obliged to take a bucket.
 
 **8.4 Who pays.** The initiator of an exit pays its output. A depositor's
 `ExitRequest` is debited its share of the rotation fee; dormancy and wind-down
@@ -175,7 +189,7 @@ height at least `winddown_notice_blocks` ahead (suggested 4032). During the noti
 period the operator MUST continue to process requests. At the final rotation every
 deposit is treated as in the bucket: addressable deposits at or above
 `dormancy_amount_msats` are spun out (§8.2), the rest migrated to a receiver
-(§8.3); remaining obligations are zero; the rotation's "new
+negotiated under §8.3; remaining obligations are zero; the rotation's "new
 vault" output is to the operator alone, and the ledger is tombstoned. If no receiver
 is available, the final rotation retains a vault sized to the remaining
 obligations at the collateral ratio and passes it to the quorum under the
