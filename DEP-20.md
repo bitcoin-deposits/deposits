@@ -132,6 +132,43 @@ between them. No on-chain step beyond the initial vault is required.
   amounts above what the wallet can wait one rotation to recover.
 - Refuse a ledger whose latest `QuorumBegin` omitted a due `ExitRequest`.
 
+### 8. Dormancy exit
+
+A deposit with no signed activity for `dormancy_blocks` (per-quorum, recorded in
+`QuorumAddMember`; suggested 26280, ~6 months) whose descriptor yields a bitcoin
+address (single-key descriptors do; see DEP-16 for which others) MAY be spun out by
+the operator: the operator appends a `DormancyNotice` naming the deposit and a
+rotation height at least `dormancy_notice_blocks` ahead (suggested 2016), and at
+that rotation includes an exit output for the balance less fees, as in §3. Any
+signed activity on the deposit before the rotation cancels the notice. Co-signers
+verify dormancy and notice from the ledger.
+
+**Dust floor.** Deposits below `dust_multiple × 34 vB × current feerate` are not
+spun out; the fixed fee drains them and the operator closes them at zero. The
+floor is set by the fee market, not by the spec. Suggested `dust_multiple` 10.
+
+### 9. Wind-down
+
+An operator MAY close a ledger by appending `LedgerWindDown` with a final rotation
+height at least `winddown_notice_blocks` ahead (suggested 4032). During the notice
+period the operator MUST continue to process requests. At the final rotation every
+deposit above the dust floor with an addressable descriptor is spun out under §8
+rules regardless of dormancy; remaining obligations are zero; the rotation's "new
+vault" output is to the operator alone, and the ledger is tombstoned. Deposits with
+no addressable descriptor MUST move by swap or transfer during the notice period;
+any residue is forfeited to the operator and is stated as such in the notice.
+
+Members are released at the final rotation. This is the intended end of life for a
+ledger whose activity no longer justifies its quorum; the alternative, letting it
+expire, ends in the Tier 3 solo path with depositors' funds inside.
+
+### 10. Migration
+
+An exit output (§3, §8, §9) MAY pay another operator's funding-offer address. The
+receiving operator credits the deposit on confirmation under DEP-10. Batched exits
+therefore move balances between ledgers at one output's cost each, which makes
+spreading across operators (DEP-11 §Fund Distribution) cheap in practice.
+
 ## Rationale
 
 Illiquidity ceases to be fraud: the operator can always sign locks and credits, and
@@ -139,7 +176,10 @@ the vault pays exits. Exit becomes cooperative-close-now, force-close-on-a-timer
 with the timer being the rotation interval, which is a market-priced parameter
 visible on the ledger. Batching every exit into one transaction per cycle keeps
 small depositors from being priced out. The resisted case needs no new machinery:
-the acquisition rotation is a rotation.
+the acquisition rotation is a rotation. Dormancy exit and wind-down give an
+operator a clean way to shed obligations it cannot carry, and release members
+from ledgers that no longer pay them; the dust floor follows the fee market so
+nothing is lost to fees that would not have been drained anyway.
 
 ## Related DEPs
 
@@ -148,6 +188,10 @@ locks), DEP-10 (withdrawal, superseded in part), DEP-11 (obligations), DEP-12
 (escalation), DEP-19 (causal visibility, inactivity, `NonConforming`).
 
 ## Open questions
+
+4. Whether wind-down should require member co-signature beyond the rotation
+   itself, to stop an operator closing a healthy ledger against its depositors'
+   interest; the notice period plus swap availability may be enough.
 
 1. Minimum rotation interval. A very short interval makes exit fast but multiplies
    on-chain cost and co-signing load; a quorum-negotiated `max_rotation_interval`
