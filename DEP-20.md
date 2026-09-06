@@ -132,40 +132,55 @@ between them. No on-chain step beyond the initial vault is required.
   amounts above what the wallet can wait one rotation to recover.
 - Refuse a ledger whose latest `QuorumBegin` omitted a due `ExitRequest`.
 
-### 8. Dormancy exit
+### 8. Dormancy rotation
 
-A deposit with no signed activity for `dormancy_blocks` (per-quorum, recorded in
-`QuorumAddMember`; suggested 26280, ~6 months) whose descriptor yields a bitcoin
-address (single-key descriptors do; see DEP-16 for which others) MAY be spun out by
-the operator: the operator appends a `DormancyNotice` naming the deposit and a
-rotation height at least `dormancy_notice_blocks` ahead (suggested 2016), and at
-that rotation includes an exit output for the balance less fees, as in §3. Any
-signed activity on the deposit before the rotation cancels the notice. Co-signers
-verify dormancy and notice from the ledger.
+Dormancy handling is a bucket rule, not a per-deposit decision, so the operator
+never selects accounts.
 
-**Dust floor.** Deposits below `dust_multiple × 34 vB × current feerate` are not
-spun out; the fixed fee drains them and the operator closes them at zero. The
-floor is set by the fee market, not by the spec. Suggested `dust_multiple` 10.
+**Parameters** (per quorum, recorded in `QuorumAddMember`, strictest applies):
+`dormancy_blocks` (suggested 26280, ~6 months), `dormancy_amount_msats`
+(suggested 10 × 34 vB × a reference feerate, revisable at rotation),
+`dormancy_notice_blocks` (suggested 2016), and each member's signed
+`dormancy_receiver` acceptance (§8.3).
 
-**Who pays.** The initiator of an exit pays its output fee. A depositor's
-`ExitRequest` is debited its output's share of the rotation fee; a dormancy exit or
-wind-down output is paid in full and its fee is borne by the operator. Timing a
-forced exit into high fees therefore costs the operator, not the depositor.
+**8.1 Selection.** The operator appends `DormancyNotice` naming a rotation height
+at least `dormancy_notice_blocks` ahead. At that rotation every deposit with no
+signed activity for `dormancy_blocks` as of the notice is in the bucket; any
+signed activity before the rotation removes it. Co-signers MUST refuse a rotation
+that includes a deposit outside the bucket or omits one inside it.
+
+**8.2 Large, addressable.** Bucket deposits at or above `dormancy_amount_msats`
+whose descriptor yields a bitcoin address are spun out as exit outputs (§3), full
+balance, output fee borne by the operator.
+
+**8.3 Small, or non-addressable.** All other bucket deposits are migrated together:
+one output to the funding address of a quorum member who signed
+`dormancy_receiver` at join, and a **manifest** in the rotation update listing each
+deposit's id, balance, and descriptor. The receiver MUST credit each deposit under
+the same descriptor on confirmation (DEP-10 credit rules), at fee terms no worse
+than its own floors, which the deposits already satisfy. Failure to credit is
+`UncreditedOnchainPayment` against the receiver on its own ledger, with the
+manifest as the offer. If no member signed as receiver, small bucket deposits are
+not moved. The receiver bears no fee; the operator pays the single output.
+
+**8.4 Who pays.** The initiator of an exit pays its output. A depositor's
+`ExitRequest` is debited its share of the rotation fee; dormancy and wind-down
+outputs are paid in full by the operator. Timing a forced move into high fees
+costs the operator, not the depositor.
 
 ### 9. Wind-down
 
 An operator MAY close a ledger by appending `LedgerWindDown` with a final rotation
 height at least `winddown_notice_blocks` ahead (suggested 4032). During the notice
 period the operator MUST continue to process requests. At the final rotation every
-deposit above the dust floor with an addressable descriptor is spun out under §8
-rules regardless of dormancy; remaining obligations are zero; the rotation's "new
-vault" output is to the operator alone, and the ledger is tombstoned. Deposits with
-no addressable descriptor SHOULD move by swap or transfer during the notice period.
-Any that remain are NOT forfeited: the final rotation retains a vault sized to
-their obligations at the collateral ratio, and that vault passes to the quorum
-under the respectful custody path (DEP-06); one member takes the remainder by
-lottery and inherits those deposits. Wind-down removes the operator, never a
-balance.
+deposit is treated as in the bucket: addressable deposits at or above
+`dormancy_amount_msats` are spun out (§8.2), the rest migrated to a receiver
+(§8.3); remaining obligations are zero; the rotation's "new
+vault" output is to the operator alone, and the ledger is tombstoned. If no receiver
+is available, the final rotation retains a vault sized to the remaining
+obligations at the collateral ratio and passes it to the quorum under the
+respectful custody path (DEP-06). Nothing is forfeited. Wind-down removes the
+operator, never a balance.
 
 Members are released at the final rotation. This is the intended end of life for a
 ledger whose activity no longer justifies its quorum; the alternative, letting it
@@ -185,8 +200,8 @@ the vault pays exits. Exit becomes cooperative-close-now, force-close-on-a-timer
 with the timer being the rotation interval, which is a market-priced parameter
 visible on the ledger. Batching every exit into one transaction per cycle keeps
 small depositors from being priced out. The resisted case needs no new machinery:
-the acquisition rotation is a rotation. Dormancy exit and wind-down give an
-operator a clean way to shed obligations it cannot carry, and release members
+the acquisition rotation is a rotation. The dormancy bucket gives an operator a
+clean way to shed obligations it cannot carry without ever choosing an account, and release members
 from ledgers that no longer pay them; the dust floor follows the fee market so
 nothing is lost to fees that would not have been drained anyway.
 
