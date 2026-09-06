@@ -51,3 +51,4 @@ Specifications use the conventions from BOLT #0: MUST, SHOULD, MAY for requireme
 | [DEP-17](DEP-17.md) | Canonical Encodings | Draft |
 | [DEP-18](DEP-18.md) | Consensus Updates and Protocol Versioning | Draft |
 | [DEP-19](DEP-19.md) | Operator Inactivity and Proof Consolidation | Draft |
+| [DEP-20](DEP-20.md) | Swap-Only Obligations and Rotation Settlement | Draft |
