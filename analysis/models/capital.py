@@ -1,7 +1,9 @@
 """Operator capital requirement calculator.
 
 Deposited coins are held by the operator, not the quorum, so they fund the vault.
-Net own capital = vault - customer deposits + liquidity buffer + arming reserve + fees.
+Net own capital = vault - customer deposits + external inventory + arming reserve + fees.
+Swaps-only: inventory (courier external leg) replaces the withdrawal buffer; w is now
+the share of deposits held as external inventory for net outflow.
 Self-fill is a ledger entry against spare capacity; it costs capacity, not capital.
 """
 def capital(L=3, D_max=1.0, rho=0.4, u=0.7, w=0.2, r=0.5, concurrent_disputes=1,
@@ -11,12 +13,12 @@ def capital(L=3, D_max=1.0, rho=0.4, u=0.7, w=0.2, r=0.5, concurrent_disputes=1,
     cust_cap = D_max - S
     deposits = L * u * cust_cap
     vaults = L * vault
-    buffer = w * deposits
+    inventory = w * deposits
     arm = concurrent_disputes * r * (u * D_max + guarded_selffill * D_max)
     onchain = L * rotations_per_year * 180 * feerate_sat_vb / 1e8 + dispute_allowance_btc
-    own = vaults - deposits + buffer + arm + onchain
+    own = vaults - deposits + inventory + arm + onchain
     return dict(vault_each=vault, vaults=vaults, deposits_held=deposits, deposits_fund_vault=deposits,
-                liquidity_buffer=buffer, arm_reserve=arm, onchain=onchain,
+                external_inventory=inventory, arm_reserve=arm, onchain=onchain,
                 own_capital=own, own_per_deposit=own/deposits if deposits else float('inf'),
                 customer_capacity=L*cust_cap, max_guarded_vault=2*vault)
 if __name__ == '__main__':
