@@ -187,6 +187,29 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 96 | genesis_block | 4 | LedgerOpen |
 | 6 | quorum_members | N*33 | QuorumBegin (concatenated 33-byte compressed pubkeys) |
 | 276 | quorum_member_ledger_ids | variable | QuorumBegin (parallel to type 6, each entry `u8 len ‖ ledger_id_bytes`) |
+| 278 | exit_cutoff_height | 4 | QuorumBegin (DEP-20 §3) |
+| 280 | exit_outputs | variable | QuorumBegin (DEP-20 §3; repeated `deposit_id(16) ‖ amount_msats(8) ‖ vout(4)`) |
+| 282 | splice_in_outpoint | 36 | QuorumBegin (DEP-20 §4; txid ‖ vout) |
+| 284 | splice_in_amount_msats | 8 | QuorumBegin (DEP-20 §4) |
+| 286 | migration_manifest | variable | QuorumBegin (DEP-20 §8.3; repeated `deposit_id(16) ‖ amount_msats(8) ‖ u16 len ‖ descriptor`) |
+| 288 | migration_receiver | 33 | QuorumBegin (DEP-20 §8.3; receiver operator pubkey) |
+| 290 | migration_vout | 4 | QuorumBegin (DEP-20 §8.3) |
+
+#### Settlement (DEP-20)
+
+| Type | Name | Size | Used by |
+|---|---|---|---|
+| 200 | deposit_id | 16 | ExitRequest, ExitCancel |
+| 2 | amount | 8 | ExitRequest |
+| 300 | exit_address | variable | ExitRequest (scriptPubKey bytes) |
+| 302 | expires_at_height | 4 | ExitRequest (optional) |
+| 204 | witness | variable | ExitRequest, ExitCancel (descriptor satisfaction) |
+| 304 | exit_request_id | 32 | ExitCancel (hash of the ExitRequest update) |
+| 306 | rotation_height | 4 | DormancyNotice, LedgerWindDown |
+| 308 | manifest_hash | 32 | DormancyNotice, DormancyAccept |
+| 288 | migration_receiver | 33 | DormancyNotice |
+| 310 | offer_event_id | 32 | DormancyAccept (Kind 9110 event id) |
+| 312 | accepted_total_msats | 8 | DormancyAccept |
 
 #### Deposits
 

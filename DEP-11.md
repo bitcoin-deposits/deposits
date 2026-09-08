@@ -97,6 +97,11 @@ The following timing parameters are recorded in `QuorumAddMember` so that all pa
 | `service_response_blocks` | Blocks before an unprocessed signed request becomes provable censorship | 72 (~12 hours) |
 | `max_transfer_timeout_blocks` | Maximum `timeout_height` distance for `TransferLock` | 1008 (~1 week) |
 | `inactivity_blocks` | Blocks without a co-signed update before a majority may attest inactivity (DEP-19) | 144 (~1 day) |
+| `cosign_response_blocks` | Blocks to co-sign or refuse a causally visible proposal (DEP-19 §9) | 72 (~12 hours) |
+| `exit_cutoff_margin_blocks` | Latest an exit cutoff may sit before its rotation block (DEP-20 §3) | 144 (~1 day) |
+| `dormancy_blocks` | Inactivity before a deposit enters the dormancy bucket (DEP-20 §8) | 26280 (~6 months) |
+| `dormancy_amount_msats` | Bucket split between on-chain spin-out and migration (DEP-20 §8) | 10 × 34 vB × reference feerate |
+| `dormancy_notice_blocks` | Notice before a dormancy rotation (DEP-20 §8) | 2016 (~2 weeks) |
 
 ## Related DEPs
 

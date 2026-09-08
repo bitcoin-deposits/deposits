@@ -22,7 +22,7 @@ When the operator confirms a deposit to the funding address, they append `Onchai
 
 ### Withdrawal
 
-Under DEP-20, on-chain withdrawal is a swap service, not an operator obligation. The guaranteed exit is the rotation exit (DEP-20 §3). Operators MAY offer the legacy withdrawal flow below as the `onchain_swap` regime (DEP-04 §Guarantee Matrix), in which case failure to process is a service failure, not censorship.
+Under DEP-20, on-chain exit is not an operator obligation; the guaranteed exit is the rotation exit (DEP-20 §3) and the atomic fast exit is an on-chain hash-locked swap (`onchain_swap`, DEP-04 §Guarantee Matrix). The legacy flow below is operator-broadcast and unverified by cosigners; it is advertised as `onchain_withdraw` with `shape: deterrence`, `honesty: operator_only`, is deprecated, and failure to process it is a service failure, not censorship.
 
 A wallet requests withdrawal by providing a destination address, amount, and witness satisfying the deposit's descriptor. The operator:
 

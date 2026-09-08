@@ -38,6 +38,10 @@ Members also specify timing parameters that govern protocol obligations (see DEP
 - **dispute_arm_blocks**: blocks after `DisputeEnter` during which members must arm for the lottery
 - **service_response_blocks**: blocks before an unprocessed signed request becomes provable censorship
 - **max_transfer_timeout_blocks**: maximum `timeout_height` distance for `TransferLock`
+- **inactivity_blocks**: blocks without a co-signed update before a majority may attest inactivity (DEP-19)
+- **cosign_response_blocks**: blocks to co-sign or refuse a visible proposal (DEP-19 §9)
+- **exit_cutoff_margin_blocks**: latest a rotation's exit cutoff may sit before its block (DEP-20 §3)
+- **dormancy_blocks**, **dormancy_amount_msats**, **dormancy_notice_blocks**: dormancy bucket parameters (DEP-20 §8)
 
 The strictest (smallest) values across all members apply to the quorum. The operator cannot open deposits with descriptors exceeding the quorum's `max_descriptor_bytes` limit.
 
@@ -93,9 +97,8 @@ If the operator misbehaves as a **quorum member** on another operator's ledger (
 
 Operators SHOULD run multiple ledgers (recommended: 3-5) with **independent quorums** per ledger. This provides:
 
-1. **Contagion**: misbehaviour proven on one ledger is punishable on every other ledger the operator runs whose quorum holds an honest majority (DEP-19 §5–6). How much this bounds a coalition depends on quorum composition, not on the count of ledgers alone (see §Security Model).
-2. **Partial confiscation**: misbehavior on one ledger triggers slashing on the others, as the honest quorums on remaining ledgers detect and act.
-3. **Capital efficiency**: the same total UTXO is split across ledgers, each with independent security.
+1. **Contagion**: misbehaviour proven on one ledger is punishable on every other ledger the operator runs whose quorum holds an honest majority (DEP-19 §5–6), so the operator's total collateral is at stake, not one ledger's. How much this bounds a coalition depends on quorum composition, not on the count of ledgers alone (see §Security Model).
+2. **Capital efficiency**: the same total UTXO is split across ledgers, each with independent security.
 
 The UTXO is split evenly: each ledger gets UTXO/L in reserves and UTXO/L in collateral (for L ledgers).
 

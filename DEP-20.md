@@ -72,12 +72,15 @@ a rotation whose cutoff is earlier. Every `ExitRequest` appended at or before th
 cutoff, and every escalated request causally visible to the operator at or before
 it (DEP-19 §8), MUST be settled in that rotation.
 
-**Cancellation.** A depositor MAY append `ExitCancel` (signed by the descriptor)
-for a pending request before the cutoff; the operator MUST process it within
-`service_response_blocks` and the locked amount is released. A request MAY carry
-`expires_at_height`; if no rotation settles it by then it is released
-automatically. Depositors who find a swap are therefore never held by their own
-request longer than the cutoff margin.
+**Cancellation.** A depositor MAY submit `ExitCancel` (signed by the descriptor)
+for a pending request. The operator MUST append it within
+`service_response_blocks`, and a cancel appended before the rotation's recording
+update takes effect: the request is excluded from settlement and the locked amount
+released. A request MAY carry `expires_at_height`; if no rotation has settled it
+by that height it is released without further action. What is guaranteed is
+therefore that a cancel is processed on the service clock and that an expiring
+request releases at its height; a request with no expiry that is not cancelled is
+held until the next rotation.
 
 **Rotation transaction.** The `QuorumBegin` rotation transaction (DEP-03) spends the
 old vault into:
