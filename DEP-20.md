@@ -82,6 +82,12 @@ therefore that a cancel is processed on the service clock and that an expiring
 request releases at its height; a request with no expiry that is not cancelled is
 held until the next rotation.
 
+A cancel appended after the cutoff but before the recording update changes the
+due set, so the operator must rebuild the rotation transaction. Operators SHOULD
+construct and collect signatures on the rotation as late in the cutoff margin as
+practical, and cosigners compute the due set from the ledger at signing time
+regardless.
+
 **Rotation transaction.** The `QuorumBegin` rotation transaction (DEP-03) spends the
 old vault into:
 
@@ -152,7 +158,10 @@ never selects accounts.
 
 **Parameters** (per quorum, recorded in `QuorumAddMember`, strictest applies):
 `dormancy_blocks` (suggested 26280, ~6 months), `dormancy_amount_msats`
-(suggested 10 × 34 vB × a reference feerate, revisable at rotation),
+(suggested 10 × 34 vB × the `reference_feerate_sat_vb` the operator records in
+each `QuorumBegin`; the value in the most recent rotation's recording update is
+the one in force for the next dormancy bucket, and cosigners refuse a rotation
+whose stated feerate is below the median of their own chain-source estimates),
 `dormancy_notice_blocks` (suggested 2016).
 
 **8.1 Selection.** The operator appends `DormancyNotice` naming a rotation height

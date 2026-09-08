@@ -194,6 +194,7 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 286 | migration_manifest | variable | QuorumBegin (DEP-20 §8.3; repeated `deposit_id(16) ‖ amount_msats(8) ‖ u16 len ‖ descriptor`) |
 | 288 | migration_receiver | 33 | QuorumBegin (DEP-20 §8.3; receiver operator pubkey) |
 | 290 | migration_vout | 4 | QuorumBegin (DEP-20 §8.3) |
+| 292 | reference_feerate_sat_vb | 4 | QuorumBegin (DEP-20 §8; sets `dormancy_amount_msats` for the next bucket) |
 
 #### Settlement (DEP-20)
 
