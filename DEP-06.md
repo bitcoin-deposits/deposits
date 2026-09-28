@@ -33,6 +33,8 @@ The `evidence_bytes` are canonical and vary by proof type.
 
 The 32-byte `proof_hash` is embedded into a ledger chain as wallet-controlled data — typically as the `nonce` field (type 210) in a self-transfer (see DEP-09). Once the operator signs an update containing this hash, the evidence is causally ordered.
 
+Embedding is for evidence that is not itself cryptographic proof of non-conformity: fraud that happens off the ledger, or whose proof depends on when something was known — an uncredited on-chain or lightning payment (types 1–2), an inactive quorum member (type 4), and censorship (DEP-11, DEP-12). A proof whose evidence already is cryptographic proof of non-conformity needs no embedding and no causal chain, and verifiers MUST NOT require one: a non-conforming update (type 5), an equivocation (two signed updates at one sequence), a stale or non-conforming co-signature (type 3), a winner collateral deviation (type 6), an unauthorised vault spend (type 7), and an expired quorum (block-anchored). Its evidence verifies on its own, and a quorum member reporting its own operator after the fraud could not embed it anyway: the accused chain now contains the fraud, honest members never co-sign past it, so no causal link to the accused ledger can form.
+
 Embedding targets (in order of preference):
 - **Direct**: on the accused operator's ledger
 - **One hop**: on a quorum member's ledger, entangled at next co-signature
@@ -43,8 +45,8 @@ Embedding targets (in order of preference):
 A fraud broadcast (Kind 9101 Nostr event) contains:
 
 - **proof**: the hashable evidence (proof type, accused, ledger_id, evidence)
-- **embedding**: where the hash was placed (ledger_id, sequence, update_hash, field name)
-- **causal_chain**: ordered list of co-signed updates linking the embedding to the accused ledger
+- **embedding**: where the hash was placed (ledger_id, sequence, update_hash, field name) — omitted for a proof that is itself cryptographic evidence (see Embedding)
+- **causal_chain**: ordered list of co-signed updates linking the embedding to the accused ledger — omitted with the embedding
 
 Each `CausalLink` is a co-signed update on ledger X whose `member_ledger_hash` comes from ledger Y, proving X happened after Y.
 
@@ -52,7 +54,7 @@ Direct embedding: empty chain. One hop: one link. Longer paths: multiple links.
 
 ## Verification
 
-A verifier:
+A verifier always checks the proof's own evidence. For a proof that needs embedding (see Embedding), it also:
 
 1. Hashes the proof, confirms it matches the nonce at `embedding.sequence`
 2. Walks the causal chain: each link's `source_ledger_id` matches the previous link's `ledger_id`
