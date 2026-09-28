@@ -202,7 +202,7 @@ update as a proposal:
     tag = SHA256("deposits/propose")
     digest = SHA256(tag || tag || cosign_data)
 
-with `cosign_data` as in DEP-02 §Co-signing. The proposal is published as a Kind
+with `cosign_data` as in DEP-02 §Signing. The proposal is published as a Kind
 9108 event. It carries no `member_ledger_hash` and is not an update; it commits the
 operator to the content at that sequence.
 

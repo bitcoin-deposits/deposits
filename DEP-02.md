@@ -42,15 +42,19 @@ The event content is a base64-encoded TLV stream:
 | 4 | sequence_number | 8 | Monotonically increasing sequence (u64 BE) |
 | 6 | previous_hash | 32 | Chain hash of the previous update |
 | 8 | message | variable | Inner operation (TLV-encoded) |
-| 10 | block_height | 4 | Block height at creation |
-| 12 | block_hash | 32 | Block hash at creation |
-| 14 | cosigner_pubkey | 33 | *Deprecated*. Single co-signer pubkey (pre-majority format). |
-| 16 | member_ledger_hash | 32 | *Deprecated*. Single co-signer's ledger hash (pre-majority format). |
-| 18 | cosign_signature | 64 | *Deprecated*. Single co-signature (pre-majority format). |
+| 10 | block_height | 4 | Block height at creation (omitted when 0) |
+| 12 | block_hash | 32 | Block hash at creation (omitted when all zero) |
 | 20 | operator_signature | 64 | Schnorr signature from operator |
 | 22 | cosignatures | variable | Majority cosignature list (see Cosignatures below) |
 
 `current_hash` is derived by the receiver (see Hash Chain).
+
+Every field except the signatures is signed (see Signing): `ledger_id`, `block_height` and
+`block_hash` are part of `cosign_data`, so no one can move an update to another ledger or
+another height without invalidating its signatures. An absent `block_height` or `block_hash` is
+signed and hashed as zero; encoders MUST omit a zero value and decoders MUST reject an explicit
+zero, so that every update has exactly one encoding. Types 14, 16 and 18 (the pre-majority
+single-cosignature format) are retired; decoders MUST reject them.
 
 ### Cosignatures (Tag 22)
 
@@ -70,21 +74,16 @@ Total entry size: 129 bytes. Entries MUST be sorted by cosigner_pubkey (lexicogr
 
 After `QuorumBegin`, updates MUST carry the cosignature threshold specified in DEP-05 §Lifecycle for the operation's class and the lifecycle tier at the update's `block_height`. Within the active period (`block_height < quorum_expiry`) this resolves to `floor(n/2) + 1` cosignatures from distinct quorum members (where n is the quorum size) — strict majority — for every operation. Past `quorum_expiry`, only establishment operations (`QuorumAddMember`, `QuorumRemoveMember`, `QuorumBegin`) remain cosignable and their required threshold cascades through the tiers in DEP-05 §Lifecycle; updates carrying any other op type past `quorum_expiry` are non-conforming regardless of cosignature count.
 
-For backward compatibility, decoders SHOULD accept the deprecated single-cosig format (tags 14/16/18) from pre-quorum updates and upgrades in progress.
-
 ## Hash Chain
 
-    cosig_data = for each cosig entry (sorted by pubkey):
-        member_ledger_hash || cosign_signature
-
-    current_hash = SHA256(
-        sequence_number (8 bytes LE)
-        || previous_hash (32 bytes)
-        || message (variable)
-        || cosig_data (variable, all entries concatenated)
-    )
+    current_hash = tagged_hash("deposits/update/v2",
+        cosign_data
+        || n (2 bytes LE)
+        || for each cosig entry (sorted by pubkey): member_ledger_hash || cosign_signature)
 
     chain_hash = SHA256(current_hash (32 bytes) || operator_signature (64 bytes))
+
+with `cosign_data`, `tagged_hash` and `n` (the number of cosignature entries) as in Signing.
 
 The operator signs the content and all co-signatures (see Signing). Their signature is folded into `chain_hash`, which becomes the next update's `previous_hash`. All signatures are committed to the chain without circularity.
 
@@ -96,13 +95,29 @@ The first update (sequence 0) has `previous_hash` = `[0; 32]`.
 
 All protocol signatures use Schnorr (BIP-340). On-chain transaction signatures follow bitcoin consensus rules separately.
 
+    tagged_hash(tag, data) = SHA256(SHA256(tag) || SHA256(tag) || data)
+
+    cosign_data = sequence_number (8 LE)
+               || ledger_id (32)
+               || block_height (4 LE)
+               || block_hash (32)
+               || previous_hash (32)
+               || len(message) (4 LE)
+               || message
+
+`cosign_data` covers every field of the update except the signatures. An update's
+`ledger_id` is otherwise signed by no one, and one key may operate several ledgers: were it
+outside the signature, anyone could republish an operator's update from one of its ledgers as
+an update of another, where it would look like equivocation or a chain break. `block_height`
+decides the lifecycle tier and so the cosignature threshold (DEP-05 §Lifecycle); were it outside
+the signature, anyone could move an honest update past `quorum_expiry`. The length prefix keeps
+the end of `message` from being read as the start of what follows it.
+
 ### Co-signing
 
-Each quorum member independently signs a tagged hash over the update content and their own ledger's tip:
+Each quorum member independently signs the update content and their own ledger's tip:
 
-    tag = SHA256("deposits/cosign")
-    cosign_data = sequence_number (8 LE) || previous_hash || message
-    digest = SHA256(tag || tag || cosign_data || member_ledger_hash)
+    digest = tagged_hash("deposits/cosign/v2", cosign_data || member_ledger_hash)
 
 `current_hash` is not signed directly — it incorporates the co-signatures themselves, so it cannot be known at signing time.
 
@@ -110,13 +125,23 @@ The operator collects the threshold of co-signatures specified in DEP-05 §Lifec
 
 ### Operator
 
-    all_cosig_data = for each cosig entry (sorted by pubkey):
-        cosign_signature (64 bytes)
+    digest = tagged_hash("deposits/operator-update/v2",
+        cosign_data
+        || n (2 bytes LE)
+        || for each cosig entry (sorted by pubkey): cosign_signature)
 
-    operator_signing_data = cosign_data || all_cosig_data
-    sig_input = SHA256(operator_signing_data)
+where `n` is the number of cosignature entries (0 before `QuorumBegin`). The operator signs after collecting the required majority of co-signatures. This seals the multilateral agreement — the operator's signature covers the content and all co-signatures.
 
-The operator signs after collecting the required majority of co-signatures. This seals the multilateral agreement — the operator's signature covers the content and all co-signatures.
+### Versions
+
+These are the v2 digests. Earlier digests (`deposits/cosign`, `deposits/cosign/v1`,
+`deposits/operator-update/v1` and the untagged operator forms) left `ledger_id`, `block_height`
+and `block_hash` unsigned. They are retired, not accepted alongside v2: a verifier that accepted
+them would accept a relabelled or re-dated copy of any update they signed.
+
+### Test vector
+
+See `vectors/dep02-signing-v2.json`.
 
 ## Operations
 
