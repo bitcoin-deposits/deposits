@@ -105,6 +105,9 @@ All protocol signatures use Schnorr (BIP-340). On-chain transaction signatures f
                || len(message) (4 LE)
                || message
 
+`block_hash` is in Bitcoin's internal byte order, as it appears in a block header: the reverse
+of the hex that `bitcoind` displays.
+
 `cosign_data` covers every field of the update except the signatures. An update's
 `ledger_id` is otherwise signed by no one, and one key may operate several ledgers: were it
 outside the signature, anyone could republish an operator's update from one of its ledgers as
