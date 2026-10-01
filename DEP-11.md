@@ -56,7 +56,7 @@ When valid fraud evidence is embedded in the causal chain and a quorum member's 
 A member MUST retain the full update history of every ledger it co-signs for and MUST serve it on request (DEP-04 §Request Actions, `ledger_history`). Relays are a cache, not the record. Refusal is not slashable but is observable and is the same signal as a refused embed (DEP-12).
 
 ### Collateral Maintenance
-The collateral portion of the operator's UTXO must be preserved through `quorum_expiry`. Co-signers MUST reject any operation that would reduce the UTXO value below `reserves_amount_msats + collateral_amount_msats`, except a `QuorumBegin` whose exit outputs reduce reserves and obligations by the same amount (DEP-20 §3). If the UTXO is spent by any script path to outputs that are not a recorded rotation or a proof-backed confiscation, every signer in the witness is accused under DEP-06 proof type 7. This covers every script path, the operator's solo path included, and a quorum majority spending to itself alike.
+The collateral portion of the operator's UTXO must be preserved through `quorum_expiry`. Co-signers MUST reject any operation that would reduce the UTXO value below `reserves_amount_msats + collateral_amount_msats`, except a `QuorumBegin` whose exit outputs reduce reserves and obligations by the same amount (DEP-20 §3). If the UTXO is spent by any script path to outputs that are not a recorded rotation or a proof-backed confiscation, every signer in the witness is accused under DEP-06 proof type 7 (wire type 10). This covers every script path, the operator's solo path included, and a quorum majority spending to itself alike.
 
 ## Wallet Obligations
 

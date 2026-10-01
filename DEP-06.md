@@ -29,11 +29,27 @@ A fraud proof is a hashable evidence document:
 
 The `evidence_bytes` are canonical and vary by proof type.
 
+The list above is descriptive; `proof_type_byte` is the wire discriminant:
+
+| byte | proof type | | byte | proof type |
+|---|---|---|---|---|
+| 1 | `UncreditedOnchainPayment` (list 1) | | 6 | `QuorumExpired` |
+| 2 | `UncreditedLightningPayment` (list 2) | | 7 | `WinnerCollateralDeviation` (list 6) |
+| 3 | `StaleCosignature` (list 3) | | 8 | `Equivocation` |
+| 4 | `DisputeDereliction` (list 4) | | 9 | `NonConformingCosignature` |
+| 5 | `NonConformingUpdate` (list 5) | | 10 | `UnauthorizedVaultSpend` (list 7) |
+
+For `UnauthorizedVaultSpend`, `accused_pubkey` is one witness signer, `ledger_id` is a ledger that signer operates (the one the proof is presented on), and
+
+    evidence_bytes = ascii_hex(spent_ledger_id) || u64_le(governing_quorumbegin_seq) || ascii_hex(spend_tx) || spend_block_hash
+
+where `spend_block_hash` is the 32 raw bytes of the confirming block. The proof also carries each spent input's prevout (`sats:script_pubkey_hex`, needed for the BIP-341 sighash); these are not hashed, since the transaction commits to them. A verifier rebuilds the reserves from the spent ledger's operator and the `QuorumBegin` at `governing_quorumbegin_seq`, finds the input spending its vault outpoint, matches the witness leaf and control block to a tier, verifies the witness signatures to that tier's threshold, and requires the accused among the signers and the block on its chain. A spend is judged only once it is 3 blocks deep, so a rotation's `QuorumBegin` can arrive first. A confiscation is excused only when the verifier knows it (its own dispute record); a verifier that missed the dispute may wrongly accuse its signers. The proof is self-evident and needs no embedding.
+
 ## Embedding
 
 The 32-byte `proof_hash` is embedded into a ledger chain as wallet-controlled data — typically as the `nonce` field (type 210) in a self-transfer (see DEP-09). Once the operator signs an update containing this hash, the evidence is causally ordered.
 
-Embedding is for evidence that is not itself cryptographic proof of non-conformity: fraud that happens off the ledger, or whose proof depends on when something was known — an uncredited on-chain or lightning payment (types 1–2), an inactive quorum member (type 4), and censorship (DEP-11, DEP-12). A proof whose evidence already is cryptographic proof of non-conformity needs no embedding and no causal chain, and verifiers MUST NOT require one: a non-conforming update (type 5), an equivocation (two signed updates at one sequence), a stale or non-conforming co-signature (type 3), a winner collateral deviation (type 6), an unauthorised vault spend (type 7), and an expired quorum (block-anchored). Its evidence verifies on its own, and a quorum member reporting its own operator after the fraud could not embed it anyway: the accused chain now contains the fraud, honest members never co-sign past it, so no causal link to the accused ledger can form.
+Embedding is for evidence that is not itself cryptographic proof of non-conformity: fraud that happens off the ledger, or whose proof depends on when something was known — an uncredited on-chain or lightning payment (types 1–2), an inactive quorum member (type 4), and censorship (DEP-11, DEP-12). A proof whose evidence already is cryptographic proof of non-conformity needs no embedding and no causal chain, and verifiers MUST NOT require one: a non-conforming update (type 5), an equivocation (two signed updates at one sequence), a stale or non-conforming co-signature (type 3), a winner collateral deviation (type 6), an unauthorised vault spend (list item 7, wire type 10), and an expired quorum (block-anchored). Its evidence verifies on its own, and a quorum member reporting its own operator after the fraud could not embed it anyway: the accused chain now contains the fraud, honest members never co-sign past it, so no causal link to the accused ledger can form.
 
 Embedding targets (in order of preference):
 - **Direct**: on the accused operator's ledger
@@ -154,7 +170,7 @@ The script supports up to N=15 disputants, but the operational policy in this re
   by anyone, so a smaller signer set does not weaken it; what the tiers
   gate is authority to spend, not the classification. A tier-path
   spend with punitive shape and no valid proof is itself an
-  unauthorised vault spend (proof type 7). Without this, a majority
+  unauthorised vault spend (list item 7, wire type 10). Without this, a majority
   that is complicit or absent converts every punitive outcome into a
   respectful one by waiting.
 

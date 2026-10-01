@@ -128,9 +128,9 @@ the proof names the ledger being disputed, which need not be `fault_ledger_id`.
 Presenting the proof on a ledger the accused merely co-signs for has no effect; the
 accused's stake is on the ledgers they operate.
 
-A separate punitive type, *unauthorised vault spend* (DEP-06 type 7), names every
+A separate punitive type, *unauthorised vault spend* (DEP-06 `UnauthorizedVaultSpend`, wire type 10), names every
 witness signer of a vault spend that is neither a recorded rotation nor a
-proof-backed confiscation. `NonConforming` covers signed ledger updates; type 7
+proof-backed confiscation. `NonConforming` covers signed ledger updates; `UnauthorizedVaultSpend`
 covers on-chain spends. Both may be presented against any ledger the accused
 operates.
 
@@ -160,7 +160,7 @@ thereby a duty with the same dereliction proof as local evidence, not a permissi
   that were active members of the expiring quorum. New members may be added by a
   subsequent Tier 0 rotation once the ledger is re-established.
 - **Tier 3.** An operator spend through the Tier 3 path to outputs that are not a
-  recorded rotation is an unauthorised vault spend (DEP-06 type 7) and does not
+  recorded rotation is an unauthorised vault spend (DEP-06 `UnauthorizedVaultSpend`, wire type 10) and does not
   extinguish obligations; it is punishable on any later ledger the operator runs.
 - **Wallet exit triggers.** Wallets SHOULD withdraw on any of: quorum size reduced
   below the size at deposit opening; a `QuorumBegin` past `quorum_expiry`; a
