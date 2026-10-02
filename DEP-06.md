@@ -109,7 +109,7 @@ Each participating quorum member appends `DisputeArmed` to their fork with:
 - **replacement_collateral_outpoint**: txid + vout of an unspent UTXO the disputant controls and pledges to commit to the new vault if they win (see DEP-03 §"Replacement collateral declaration")
 - **replacement_collateral_amount**: the value (in sats) they pledge to commit from that UTXO; must satisfy `≥ obligations × collateral_ratio + claim_fee_estimate` where `obligations` is the total deposits owed at `last_valid_sequence`
 
-Members must arm within `dispute_arm_blocks` after `DisputeEnter`. Late entries are excluded. Of the armers within the window, only those whose replacement collateral passes the eligibility snapshot in DEP-03 §"Replacement collateral declaration" are lottery participants; a failing declaration excludes that armer and never stalls the dispute. `dispute_arm_blocks` is recorded in `QuorumAddMember` so all parties agree on the obligation at join time.
+Members must arm within `dispute_arm_blocks` after `DisputeEnter`. Late entries are excluded. Of the armers within the window, only those whose replacement collateral passes the eligibility snapshot in DEP-03 §"Replacement collateral declaration" are lottery participants; a failing declaration excludes that armer and never stalls the dispute. A single participant takes custody without a draw. `dispute_arm_blocks` is recorded in `QuorumAddMember` so all parties agree on the obligation at join time.
 
 The participant ordering (canonical, derived from sorted `quorum_pubkey`) and the committed hashes go into the lottery script that the confiscation transaction will lock funds into.
 

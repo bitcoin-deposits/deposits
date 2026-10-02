@@ -256,8 +256,20 @@ agree on it.
 An armer that is not a participant is excluded: it is not in the lottery script, receives no
 slashing share, and counts as a non-arming member for the recovery quorum (it may cosign the
 confiscation). Cosigners MUST refuse a confiscation whose participant set differs from the one
-this rule yields, and MUST NOT refuse one because an armer was excluded. If fewer than 2 armers
-are participants, the dispute stalls as it does with fewer than 2 armers.
+this rule yields, and MUST NOT refuse one because an armer was excluded.
+
+**One participant** takes custody without a draw: the lottery's primary leaf is
+`<participant_xonly> OP_CHECKSIG` (no preimage is revealed; the recovery leaves are unchanged).
+A floor of two would hand the veto back to a colluder: one honest armer plus one colluder with a
+spent pledge would stall. A sole participant is safe because the recovery quorum still cosigns
+the confiscation against the proof.
+
+**No participant**: no confiscation is built. An armer whose pledge fails the cut MAY re-arm with a
+fresh one (same commitment); its latest arm counts and moves E, which reopens the window. Only an
+armer's first four `DisputeArmed` (the arm and three re-arms) count, so no one can keep moving E.
+If every armer has exhausted its arms and none is a participant, the dispute does not confiscate:
+custody of the vault falls to its post-expiry tiers (DEP-05 §Lifecycle), as for a quorum that
+never disputed.
 
 A participant whose pledge is spent after E, or who otherwise deviates from its declaration when
 claiming, is caught at claim time as a `WinnerCollateralDeviation` (below and DEP-06), not here.
