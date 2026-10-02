@@ -248,8 +248,8 @@ An armer is a **participant** iff all of:
 
 Only the confirmed chain counts: mempool state is never consulted, so the verdict is stable once
 E is buried, including after the winner spends its pledge into the claim. `claim_fee_floor` is
-`reference_feerate_sat_vb` from the governing `QuorumBegin` (DEP-20 §8; 200 sat/vB when absent)
-× 400 vB, the multi-input claim's size bound. It is a rule, not a policy, because cosigners must
+`reference_feerate_sat_vb` from the governing `QuorumBegin` (DEP-20 §8) × 200 vB, the multi-input
+claim's size, or 5,000 sats when no feerate is recorded. It is a rule, not a policy, because cosigners must
 agree on it.
 
 An armer that is not a participant is excluded: it is not in the lottery script, receives no
