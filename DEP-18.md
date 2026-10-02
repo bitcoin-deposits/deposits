@@ -6,7 +6,7 @@ a consensus rule change — anything that alters what a cosigner must agree is a
 
 ## motivation
 
-the protocol already versions one class of consensus rule: the on-chain reserves tapscript cascade. each ledger records an `active_ruleset_name` set from its most recent `QuorumBegin.protocol_version` (absent → `"legacy"` via `ruleset::resolve_or_legacy`), quorum members advertise the rulesets they can validate (`supported_rulesets`), and `quorum begin` refuses to rotate into a ruleset some member cannot validate (`ruleset::member_supports`). reserves reconstruction reads the ledger's own version, so a node running new code still reconstructs an old ledger under the rules that ledger was created with.
+the protocol already versions one class of consensus rule: the on-chain reserves tapscript cascade. each ledger records an `active_ruleset_name` set from its most recent `QuorumBegin.protocol_version` (required: a `QuorumBegin` without one, or naming an unregistered ruleset, is non-conforming), quorum members advertise the rulesets they can validate (`supported_rulesets`), and `quorum begin` refuses to rotate into a ruleset some member cannot validate (`ruleset::member_supports`). reserves reconstruction reads the ledger's own version, so a node running new code still reconstructs an old ledger under the rules that ledger was created with.
 
 two gaps remain:
 
@@ -20,10 +20,10 @@ this dep closes both: it extends the per-ledger version to cover all version-gat
 every ledger has a single active consensus version:
 
 - it is the `active_ruleset_name` on `LedgerState`;
-- a missing field (pre-versioning `QuorumBegin`s) resolves to `"legacy"`;
+- a `QuorumBegin` MUST name a registered ruleset; there is no default. (the pre-versioning `legacy` cascade and `cltv-offset-literal`, whose recovery tiers used absolute heights rather than `quorum_expiry + offset`, were removed from the registry on 2026-10-02.)
 - it names a **ruleset** that defines *both* the on-chain reserves cascade (the tapscript tier factory) *and* the set of ledger-op conformance rules in force.
 
-versions are **named, not ordered**. there is no epoch counter and no `>=` comparison. whether a given rule is active is a *property of the named ruleset*, looked up directly — "does this ledger's ruleset enforce the fee cap?" — exactly as the reserves cascade is looked up by name today. a node knows a finite, append-only registry of rulesets (`ruleset::all_supported_names`); it never invents one. rules that predate versioning (reserve-backing, the `FeeWindowNotElapsed` timing check) are intrinsic to every ruleset including `legacy`.
+versions are **named, not ordered**. there is no epoch counter and no `>=` comparison. whether a given rule is active is a *property of the named ruleset*, looked up directly — "does this ledger's ruleset enforce the fee cap?" — exactly as the reserves cascade is looked up by name today. a node knows a finite, append-only registry of rulesets (`ruleset::all_supported_names`); it never invents one. rules that predate versioning (reserve-backing, the `FeeWindowNotElapsed` timing check) are intrinsic to every ruleset.
 
 each ruleset declares a **reserves-cascade family** — the on-chain script shape it produces. two rulesets in the same family produce byte-identical reserves UTXOs and differ only in off-chain op rules. (`fee-cap-v3` is in the same family as `cltv-offset-v2`: same reserves script, plus the fee cap. `balance-commit-v4` is likewise in the `cltv-offset-v2` family: `fee-cap-v3`'s rules plus required balance commitments on balance-touching ops — see [dep-02](DEP-02.md) §Balance Commitments.)
 
@@ -90,7 +90,7 @@ because `fee-cap-v3` shares `cltv-offset-v2`'s reserves family, the fleet can ad
 
 `balance-commit-v4` follows the same split ([dep-02](DEP-02.md) §Balance Commitments):
 
-- the **verify-when-present** rule (`BalanceCommitmentMismatch` — declared post-op balances must equal the replayed state) is intrinsic to every ruleset including `legacy`. this is safe unconditionally: the commitment fields are odd TLV tags that no pre-commitment update carries, so no historical update can retroactively fault, and an operator only ever opts in by emitting the fields.
+- the **verify-when-present** rule (`BalanceCommitmentMismatch` — declared post-op balances must equal the replayed state) is intrinsic to every ruleset. this is safe unconditionally: the commitment fields are odd TLV tags that no pre-commitment update carries, so no historical update can retroactively fault, and an operator only ever opts in by emitting the fields.
 - the **require-presence** rule (`MissingBalanceCommitment` — every balance-touching op must carry its commitment pair) is part of ruleset **`balance-commit-v4`** and activates per-ledger via `QuorumUpgrade` or `QuorumBegin.protocol_version`. until then, commitment-less operations remain conforming.
 - operator-side population of the fields is safe to deploy immediately (like the operator-side fee cap): emitting a *correct* commitment is conforming under every ruleset, and cosigners running older code skip the odd tags entirely.
 

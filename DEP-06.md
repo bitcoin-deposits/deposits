@@ -16,6 +16,8 @@ This document specifies fraud proof construction, embedding, broadcast, and veri
 
 5. **Non-conforming update**: the operator signed a ledger update that violates protocol rules (e.g., spending more than balance, invalid fee collection).
 
+   An operator-signed update that extends nothing in the ledger's history (its `previous_hash` links to no update) is not itself fraud, even though v2 signatures make it attributable: it is provable only as `Equivocation` (it conflicts with another update at its sequence) or as a non-conforming update (if it is cosigned).
+
 6. **Winner collateral deviation**: the lottery winner's broadcast claim TX deviates from the replacement collateral they committed to in `DisputeArmed` — missing the second input, pointing at a different UTXO, committing less than declared, or adding change outputs that drain the pledged amount. Verifiable on-chain by inspecting the claim TX against the disputant's stored `DisputeArmed` declaration.
 
 7. **Unauthorised vault spend**: the reserves UTXO was spent by any script path (Tier 0–3) to outputs that are neither a `QuorumBegin` rotation recorded on the ledger (including its exit, migration, and splice outputs under DEP-20) nor a confiscation transaction backed by a valid dispute. Evidence is the spending transaction, the ledger's latest `QuorumBegin`, and absence of a matching rotation or `DisputeEnter`. Every key whose signature appears in the witness is an accused; the proof is punitive and is presented on each accused's own ledgers. Verifiable by anyone from chain data plus the ledger.

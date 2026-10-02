@@ -177,7 +177,7 @@ A quorum's authority cascades through tiers anchored to `quorum_expiry`. At each
 | 1 | (rotation expected)            | `< quorum_expiry`       | Tier 0        | majority of cosigners                                   |
 | 2 | quorum expiration              | `quorum_expiry`         | Tier 0 ends   | (value-moving ops become uncosignable)                  |
 | 3 | majority confiscation          | `quorum_expiry`         | Tier 0        | majority cosigners → DEP-06 `QuorumExpired` confiscation |
-| 4 | minority re-establishment      | `quorum_expiry + 720`   | Tier 1        | operator + minority cosigners → degraded `QuorumBegin`   |
+| 4 | minority re-establishment      | `quorum_expiry + 720`   | Tier 1        | operator + minority (`ceil(n/2) - 1`) cosigners → degraded `QuorumBegin` |
 | 5 | minority confiscation          | `quorum_expiry + 720`   | Tier 1        | minority cosigners → degraded DEP-06 confiscation        |
 | 6 | solo-member re-establishment   | `quorum_expiry + 4032`  | Tier 2        | operator + one cosigner → degraded `QuorumBegin`         |
 | 7 | solo-member confiscation       | `quorum_expiry + 4032`  | Tier 2        | one cosigner → degraded DEP-06 confiscation              |

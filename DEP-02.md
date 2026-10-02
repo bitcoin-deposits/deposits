@@ -477,7 +477,7 @@ the parties that replay state — the quorum.
 
 Two rules, split by ruleset (DEP-18):
 
-- **Intrinsic (every ruleset, including `legacy`):** if commitment fields are
+- **Intrinsic (every ruleset):** if commitment fields are
   present on an operation, they MUST equal the replayed post-state. A cosigner
   applies the operation and compares; any mismatch is
   `ConformanceViolation::BalanceCommitmentMismatch` and the update MUST NOT be
@@ -486,8 +486,8 @@ Two rules, split by ruleset (DEP-18):
   fault.
 - **Under `balance-commit-v4`:** every balance-touching operation MUST carry
   its commitment pair(s). A missing pair is
-  `ConformanceViolation::MissingBalanceCommitment`. Legacy and `fee-cap-v3`
-  ledgers accept commitment-less operations indefinitely.
+  `ConformanceViolation::MissingBalanceCommitment`. `cltv-offset-v2` and
+  `fee-cap-v3` ledgers accept commitment-less operations indefinitely.
 
 A cosigned update whose commitments are wrong is fraud under the existing
 DEP-06 machinery — `NonConformingCosignature` (the quorum signed a

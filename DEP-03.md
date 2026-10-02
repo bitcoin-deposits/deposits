@@ -31,12 +31,13 @@ routine rotation TX uses. This means:
 - The operator's solo path is the absolute last resort, opening only
   after every quorum-driven path has had time to act.
 
-For a quorum of n members:
+For a quorum of n voters (the operator and its members, as the tapscript
+counts them):
 
 | Tier | Signers | Timelock | Purpose |
 |---|---|---|---|
 | 0 | Majority of quorum (no operator) | None — anytime | Normal operations: rotation, co-signed settlements |
-| 1 | Minority of quorum, `floor(n/2)` members (no operator) | `quorum_expiry + 720` blocks (~5 days) | Degraded quorum recovery when members disappear |
+| 1 | Minority of quorum, `ceil(n/2) - 1` signers (the complement of Tier 0's `floor(n/2) + 1`) | `quorum_expiry + 720` blocks (~5 days) | Degraded quorum recovery when members disappear |
 | 2 | Single quorum member (no operator) | `quorum_expiry + 4032` blocks (~4 weeks) | Recovery when only one member remains active |
 | 3 | Operator only | `quorum_expiry + 8064` blocks (~8 weeks) | Operator solo, last resort after all quorum paths failed |
 
