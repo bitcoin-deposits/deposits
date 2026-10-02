@@ -232,14 +232,17 @@ Which armers take part in the lottery (and, in a punitive dispute, receive a sla
 deterministic function of the ledger and the confirmed chain, so every cosigner computes the same
 set and no single declaration can stall the dispute.
 
-**Eligibility snapshot.** Let `H = enter_block + dispute_arm_blocks` (the arm window's close, DEP-06
-§Phase 1) and `E = min(H, max armed_block over the DisputeArmed entries appended within the
-window)`. An armer is a **participant** iff all of:
+**Eligibility snapshot.** For each armer take its latest `DisputeArmed` (highest sequence on its
+fork; a re-arm replaces the declaration). Let `E` be the highest signed-header `block_height` among
+those updates. Under v2 signing the header's `block_hash` binds that height to a real block, so an
+armer cannot place E in the future; backdating its own arm lowers E only if it is the latest armer,
+and an honest armer's pledge, confirmed before it arms, is still created at or below E.
+An armer is a **participant** iff all of:
 
 1. `replacement_collateral_amount ≥ obligations × collateral_ratio + claim_fee_floor`, where
    `obligations` is the total deposit value owed at `last_valid_sequence` (the lottery output
    covers exactly this amount, so only the ratio padding and fee come from the replacement);
-2. the outpoint was created in a block at height ≤ E;
+2. the outpoint was confirmed in a block at height ≤ E;
 3. the outpoint was unspent as of the end of block E (spent in a block > E, or not at all); and
 4. its value is ≥ `replacement_collateral_amount`.
 
