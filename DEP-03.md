@@ -228,29 +228,35 @@ they win:
 - `replacement_collateral_amount`: the value (in sats) they pledge to the
   new vault from that UTXO
 
-At confiscation cosign time, every cosigner verifies, against their own
-chain source, that each disputant's declaration satisfies all of:
+Which armers take part in the lottery (and, in a punitive dispute, receive a slashing share) is a
+deterministic function of the ledger and the confirmed chain, so every cosigner computes the same
+set and no single declaration can stall the dispute.
 
-1. The outpoint exists on-chain and is unspent at the cosigner's tip
-2. Its value is ≥ `replacement_collateral_amount`
-3. The post-takeover collateralization inequality holds:
+**Eligibility snapshot.** Let `H = enter_block + dispute_arm_blocks` (the arm window's close, DEP-06
+§Phase 1) and `E = min(H, max armed_block over the DisputeArmed entries appended within the
+window)`. An armer is a **participant** iff all of:
 
-   ```
-   replacement_collateral_amount  ≥  obligations × collateral_ratio + claim_fee_estimate
-   ```
+1. `replacement_collateral_amount ≥ obligations × collateral_ratio + claim_fee_floor`, where
+   `obligations` is the total deposit value owed at `last_valid_sequence` (the lottery output
+   covers exactly this amount, so only the ratio padding and fee come from the replacement);
+2. the outpoint was created in a block at height ≤ E;
+3. the outpoint was unspent as of the end of block E (spent in a block > E, or not at all); and
+4. its value is ≥ `replacement_collateral_amount`.
 
-   where `obligations` is the total deposit value owed at
-   `last_valid_sequence` (the lottery output covers exactly this amount,
-   so only the ratio padding and fee need to come from the replacement).
+Only the confirmed chain counts: mempool state is never consulted, so the verdict is stable once
+E is buried, including after the winner spends its pledge into the claim. `claim_fee_floor` is
+`reference_feerate_sat_vb` from the governing `QuorumBegin` (DEP-20 §8; 200 sat/vB when absent)
+× 400 vB, the multi-input claim's size bound. It is a rule, not a policy, because cosigners must
+agree on it.
 
-If any disputant's declaration fails any check, the cosigner MUST refuse
-to sign the confiscation transaction. The dispute is then stalled until
-the failing disputant amends `DisputeArmed` (re-arming with a sufficient
-UTXO before the arm window closes) or is excluded for missing the window.
+An armer that is not a participant is excluded: it is not in the lottery script, receives no
+slashing share, and counts as a non-arming member for the recovery quorum (it may cosign the
+confiscation). Cosigners MUST refuse a confiscation whose participant set differs from the one
+this rule yields, and MUST NOT refuse one because an armer was excluded. If fewer than 2 armers
+are participants, the dispute stalls as it does with fewer than 2 armers.
 
-The fee estimate floor is policy. Recommended default: 200 sat/vB ×
-estimated multi-input claim TX vsize. A stricter cosigner is free to
-refuse what laxer cosigners would accept.
+A participant whose pledge is spent after E, or who otherwise deviates from its declaration when
+claiming, is caught at claim time as a `WinnerCollateralDeviation` (below and DEP-06), not here.
 
 ### Claim transaction (multi-input)
 
