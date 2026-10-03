@@ -97,13 +97,13 @@ When a quorum member detects fraud (via Kind 9101 broadcast or direct observatio
 
 ### Lottery
 
-The lottery determines which quorum member takes custody of the disputed ledger. Selection happens *on chain*, enforced by a Tapscript that only lets the script-determined winner spend the lottery output. Off-chain agreement on the outcome is not required. See DEP-03 §"Custody Lottery" and `CUSTODY_LOTTERY.md` for full script construction details.
+The lottery determines which quorum member takes custody of the disputed ledger. Selection happens *on chain*, enforced by a Tapscript that only lets the script-determined winner spend the lottery output. Off-chain agreement on the outcome is not required. DEP-03 §"Custody Lottery" summarises the flow; the construction is specified here.
 
 #### Phase 1: Commitment (DisputeArmed)
 
 Each participating quorum member appends `DisputeArmed` to their fork with:
 
-- **commitment_hash**: `HASH160(preimage)` where `preimage` is a 17-to-`(16+N)`-byte random value chosen by the member. The preimage's *length* contributes the entropy: `contribution = LEN(preimage) - 16` lies in `1..=N`.
+- **commitment_hash**: `HASH160(preimage)` where `preimage` is a 17-to-76-byte random value chosen by the member, independent of how many others arm. The preimage's *length* contributes the entropy: `contribution = LEN(preimage) - 16` lies in `1..=60` (`LOTTERY_CONTRIBUTION_RANGE = 60`; 76 bytes stays within the 80-byte standard tapscript stack item).
 - **target_reserves**: the bitcoin address where the member wants their winnings sent if they win
 - **armed_block**: the block height at time of arming
 - **replacement_collateral_outpoint**: txid + vout of an unspent UTXO the disputant controls and pledges to commit to the new vault if they win (see DEP-03 §"Replacement collateral declaration")
@@ -117,37 +117,106 @@ The participant ordering (canonical, derived from sorted `quorum_pubkey`) and th
 
 After the arm window closes, the recovery quorum (quorum members minus the disputants — the disputed operator + non-arming members) cosigns a confiscation transaction that spends the disputed reserves UTXO to a new Taproot output: the **lottery output**. The required recovery-quorum threshold for the confiscation cosignature follows the lifecycle schedule in DEP-05 §Lifecycle: a strict majority of the recovery quorum at Tier 0 (immediately past `quorum_expiry`), a minority at Tier 1 (`quorum_expiry + 720`), a single recovery-quorum member at Tier 2 (`quorum_expiry + 4032`). The confiscation transaction's on-chain spend witness uses the matching on-chain tier from DEP-03 §Spending Tiers, so on-chain and off-chain authority always agree at the chain tip when the confiscation TX is signed.
 
-Its tapscript tree contains:
+Its tapscript tree (internal key: the NUMS point) contains, for the k eligible participants in
+canonical order (sorted x-only pubkey), `2 ≤ k ≤ MAX_LOTTERY_PARTICIPANTS = 7`:
 
-- A primary lottery claim leaf that dispatches to the `(sum mod N)`-th disputant on full reveal
-- For N≥3, K=1 partial-reveal leaves at CSV 72 (one per missing disputant) that handle the dominant single-non-revealer case
-- A long-tail recovery cascade at CSV 144 / 1008 / 4032 with thresholds T / T-1 / T-2
-- A timeout-recovery escape hatch at CSV 8064 with threshold 1
+- **Full-set leaf** (no timelock): verifies every participant's preimage and lets only the
+  `(Σ contribution) mod k`-th participant spend.
+- **Revealer-subset leaves**: one per nonempty proper subset S of the participants (`2^k − 2`
+  leaves), each behind `<LOTTERY_REVEAL_CSV = 72> OP_CSV OP_DROP`. A subset leaf requires a
+  threshold of recovery-voter signatures attesting S (below), verifies the preimages of exactly
+  the members of S, and lets only the `(Σ_{i∈S} contribution_i) mod |S|`-th member of S spend.
+- **Recovery cascade** at CSV 144 / 1008 / 4032 with thresholds T / T-1 / T-2, and the
+  timeout-recovery escape hatch at CSV 8064 with threshold 1, as before.
+
+A sole eligible participant (k = 1) gets a plain signature leaf instead of the first two kinds:
+it takes custody without a draw.
+
+**Leaf scripts.** For a member list S = (s_0 … s_{m-1}) in canonical order:
+
+    [ <72> OP_CSV OP_DROP                                      ; subset leaves only
+      <v_0> OP_CHECKSIG <v_1> OP_CHECKSIGADD … <v_{r-1}> OP_CHECKSIGADD
+      <T> OP_GREATERTHANOREQUAL OP_VERIFY ]                     ; subset leaves only
+    for each i in 0..m:  OP_DUP OP_HASH160 <h_{s_i}> OP_EQUALVERIFY
+                         OP_SIZE OP_DUP <17> OP_GREATERTHANOREQUAL OP_VERIFY
+                         OP_DUP <76> OP_LESSTHANOREQUAL OP_VERIFY
+                         OP_SWAP OP_DROP <16> OP_SUB  [OP_TOALTSTACK unless i = m-1]
+    (m-1) × (OP_FROMALTSTACK OP_ADD)
+    m = 1:  OP_DROP <pk_{s_0}> OP_CHECKSIG
+    m ≥ 2:  for b in 5,4,3,2,1,0:  OP_DUP <m·2^b> OP_GREATERTHANOREQUAL OP_IF <m·2^b> OP_SUB OP_ENDIF
+            for i in 0..m:  OP_DUP <i> OP_EQUAL OP_IF OP_DROP <pk_{s_i}> OP_CHECKSIG OP_ELSE
+            OP_DROP OP_0  m × OP_ENDIF
+
+`v_0 … v_{r-1}` are the recovery voters sorted by x-only key and T the recovery threshold; the
+sum is below 64·m, so six conditional subtractions reduce it mod m. Witness, bottom to top:
+`winner_sig, preimage_{s_{m-1}} … preimage_{s_0}, [voter_sig_{r-1} … voter_sig_0], leaf, control`
+(an absent voter signature is the empty push).
+
+**Leaf order** (it fixes the tree, and so the address): the full-set leaf; then the subset
+leaves by decreasing |S|, and within a size in lexicographic order of member indices (the order
+`combinations(range(k), m)` yields); then the four recovery leaves. Depths follow the existing
+balanced layout (DEP-03): for M leaves with `2^(d-1) < M ≤ 2^d`, the first `2(M − 2^(d-1))` at
+depth d and the rest at d-1. At k = 7 that is 131 leaves, depth 8, a 289-byte control block.
 
 #### Phase 3: Reveal (CustodyLotteryReveal)
 
-Once the confiscation transaction confirms, each disputant publishes a `CustodyLotteryReveal` event (Nostr Kind 9106) carrying their preimage. The signature on the reveal binds `(ledger_id, preimage)` to the disputant's identity.
+Once the confiscation transaction confirms, each participant publishes a `CustodyLotteryReveal`
+event (Nostr Kind 9106) carrying their preimage, within `LOTTERY_REVEAL_CSV = 72` blocks of the
+confiscation's confirmation (the reveal deadline). The signature on the reveal binds
+`(ledger_id, preimage)` to the participant's identity.
 
 #### Phase 4: Claim and Settlement (DisputeAcquire)
 
-The script's selection rule: **winner index = sum(LEN(preimage_i) - 16) mod N**, where preimages are ordered by sorted disputant pubkey. Only the winner's signature satisfies the lottery claim leaf, so Bitcoin itself enforces the outcome.
+**Everyone revealed:** the winner is `Σ(LEN(preimage_i) − 16) mod k` over all participants in
+canonical order; it spends the full-set leaf at once.
 
-The winner:
+**Some withheld:** after the deadline, let R be the set of participants whose valid reveals
+(hashing to their commitment) a recovery voter has observed. The winner is the
+`(Σ_{i∈R} contribution_i) mod |R|`-th member of R. It builds the claim, and asks the recovery
+voters (`lottery_subset_attest`, DEP-04) to sign its sighash for the R leaf. An honest voter
+signs only if: the confiscation has `LOTTERY_REVEAL_CSV` confirmations; R is exactly the set of
+participants whose valid reveals it has observed; the requester is R's winner; and the claim
+pays as in this section (the lottery output to the winner's `target_reserves`, with the winner's
+replacement collateral as the second input, DEP-03). Withholding never helps the withholder: it
+is not in R and cannot win. Custody always goes to exactly one participant.
 
-1. Collects all revealed preimages from Nostr
-2. Computes the winning index off-chain via `LotteryOutput::calculate_winner` (must agree with what the script will accept)
-3. Constructs the claim transaction spending the lottery output to their `target_reserves` (see DEP-03 for witness construction)
-4. Broadcasts the claim TX
-5. Appends `DisputeAcquire` to their fork carrying `claim_txid` (the claim TX's hash), `new_custodian`, and `new_reserves_address`
-6. Establishes a new quorum on the ledger and begins co-signing updates as the new operator
+The winner then:
+
+1. Broadcasts the claim TX
+2. Appends `DisputeAcquire` to their fork carrying `claim_txid` (the claim TX's hash), `new_custodian`, and `new_reserves_address`
+3. Establishes a new quorum on the ledger and begins co-signing updates as the new operator
 
 Losers append `DisputeYield` to their forks, transitioning them to Tombstoned state. Only the winner's fork continues as the canonical ledger.
 
-If exactly one disputant fails to reveal within the timeout, the remaining N-1 can spend through the partial-reveal leaf for that missing index — same lottery mechanics, just over the smaller revealer set. If 2+ fail to reveal, the dispute falls through to the CSV-144 recovery cascade.
+**Nobody revealed** (R empty at the deadline): no claim leaf is satisfiable. The recovery quorum
+spends the lottery output through the CSV-144 recovery leaf (or a later tier if fewer sign) into
+a **new lottery output for a fresh arm round** over the same ledger: a new `DisputeArmed` round
+under the DEP-03 eligibility rule and its re-arm bound, after which the same claim rules apply.
+Honest voters MUST NOT sign a recovery spend that pays the accused operator, or that pays any
+destination other than the re-arm round's lottery output; such a spend is an unauthorised spend
+of disputed funds. *(Implementation status: neither implementation orchestrates the re-arm round
+yet; both refuse to sign any other recovery spend, so the output waits.)*
+
+**Influence and bias.**
+- *Last revealer:* a participant can still choose between revealing (draw over R) and withholding
+  (draw over R without it), one bit of influence per withholder; it can never steer the draw to
+  itself by withholding. A withholder that privately shares its preimage with a partner gives the
+  partner the same one bit (the full-set leaf, or the attested R), not a choice of subsets: the
+  voter attestation pins R.
+- *Late reveals:* a reveal published after voters attested R also enables the full-set leaf, so the
+  R winner and the full-set winner may race; the R winner should broadcast as soon as it has the
+  attestations.
+- *Modulo bias:* a uniform contribution over 1..60 is exactly uniform mod m for every m ∈ 1..6
+  (60 = lcm(1..6)). For m = 7, residues 1–4 occur with probability 9/60 and 5, 6, 0 with 8/60, so a
+  participant's chance is between 13.3% and 15.0% rather than 14.3%. A wider range would need
+  preimages beyond the 80-byte standard stack item.
 
 #### Pre-release policy cap
 
-The script supports up to N=15 disputants, but the operational policy in this release is `VALID_QUORUM_SIZES = {3, 5, 7}` with `MAX_QUORUM_SIZE_POLICY = 7` (`Q` is the cosigner count and excludes the operator) → at most 7 disputants per dispute. The operator is barred from disputing their own ledger by `validate_update_signer` and was never counted in `Q`, so disputants equal `Q` exactly. `Ledger::validate_operation` rejects `QuorumBegin` whose `Q` falls outside the allowed set. Lifting the cap or extending the set is a one-line constant change with no script or wire-format implications.
+`MAX_LOTTERY_PARTICIPANTS = 7`, matching `VALID_QUORUM_SIZES = {3, 5, 7}` and
+`MAX_QUORUM_SIZE_POLICY = 7` (`Q` excludes the operator, who cannot dispute its own ledger, so
+participants ≤ Q). The subset tree has `2^k − 1` claim leaves, which bounds k: raising the cap
+needs a different claim construction, not a constant change.
 
 #### Respectful vs Punitive
 
@@ -194,7 +263,7 @@ The sweep leaf permits the recovery quorum to spend the slice; the leaf does NOT
 
 > **The sweep TX MUST pay the slice (less fee) pro-rata to the set of revealers, split into one P2TR output per revealer keyed by `armer.pubkey`.**
 
-A *revealer* is an armer whose preimage appears in the lottery output's claim TX witness OR in a published `CustodyLotteryReveal` event before the sweep TX is constructed. Equivalently: an armer who satisfied either the primary lottery leaf, a partial-reveal leaf, or signed a Kind 9106 reveal that the sweepers can verify against the on-chain `commitment_hash`. The set of revealers is derivable from public evidence (chain + relay) at sweep time; sweepers are expected to compute it deterministically and agree on the resulting recipient list before cosigning the sweep TX.
+A *revealer* is an armer whose preimage appears in the lottery output's claim TX witness OR in a published `CustodyLotteryReveal` event before the sweep TX is constructed. Equivalently: an armer whose preimage appears in the full-set or a revealer-subset claim, or who signed a Kind 9106 reveal that the sweepers can verify against the on-chain `commitment_hash`. The set of revealers is derivable from public evidence (chain + relay) at sweep time; sweepers are expected to compute it deterministically and agree on the resulting recipient list before cosigning the sweep TX.
 
 ##### Sweep orchestration
 
@@ -211,7 +280,9 @@ dust         = (slice_value - fee) - (per_revealer * N_revealers)   // absorbed 
 ```
 Order recipients by sorted `armer.pubkey` so the constructed TX is deterministic and reproducible by every honest signer.
 
-Edge case — `N_revealers == 0`: no one revealed at all (the lottery itself fell through to its recovery cascade). In that case the sweep TX has no honest recipient set; the recovery quorum may sweep the slice into a single output for whichever recovery destination they normally direct lottery-recovery funds to (typically the original operator's pubkey, mirroring the respectful-confiscation change output). This case is degenerate — if no one revealed, the whole lottery already failed — but the sweep path still needs SOME defined destination.
+Edge case — `N_revealers == 0`: no one revealed at all, so the lottery output itself goes to the
+re-arm round (Phase 4). The share slices follow it: sweepers MUST pay them into the re-arm round's
+lottery output, never to the accused operator. Until that round exists the slices stay unswept.
 
 Honest-sweeper enforcement: a sweep TX whose outputs deviate from this pro-rata-to-revealers contract is publicly observable. Sweepers who construct a deviating TX are themselves cosigners of the same ledger, and the deviation is a form of provable misbehavior. A `MaliciousSweep` fraud-proof type may be added later; for now the contract is enforced by recovery-quorum honesty and the social/reputational cost of public deviation. This is no stronger an honesty assumption than the recovery-quorum already requires for the lottery's own recovery long-tail.
 

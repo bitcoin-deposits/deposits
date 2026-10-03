@@ -106,44 +106,59 @@ This is cheap (one additional output on a transaction the operator is already ma
 
 ## Custody Lottery
 
-When a ledger becomes contested (dispute), quorum members compete for custody via an on-chain Tapscript lottery. Selection is enforced by Bitcoin script — the (sum mod N)-th disputant in canonical order is the only one whose signature satisfies the claim leaf. Off-chain agreement on the outcome is not required.
+When a ledger becomes contested (dispute), the eligible armers compete for custody via an on-chain
+Tapscript lottery. Selection is enforced by Bitcoin script: only the drawn participant's signature
+satisfies a claim leaf. Off-chain agreement on the outcome is not required, except that a draw over
+fewer than all participants (some withheld their reveal) needs the recovery voters to attest which
+participants revealed. The full construction is DEP-06 §Lottery; this section summarises it.
 
 ### Flow
 
-1. Each disputing member publishes `DisputeArmed` with a `commitment_hash = HASH160(preimage)` where `preimage` is a 17-to-`(16+N)`-byte random value. The preimage's *length* contributes the entropy: `contribution = LEN(preimage) - 16` lies in `1..=N`.
-2. After the arm window closes, the recovery quorum cosigns a confiscation transaction spending the disputed reserves UTXO into a new Taproot output: the **lottery output**.
-3. Each disputant publishes their preimage as a `CustodyLotteryReveal` event (Nostr Kind 9106).
-4. Once all reveals are observed, the script-determined winner = `(sum_of_contributions) mod N` constructs and broadcasts the **claim transaction**, providing all preimages and their signature in the witness.
-5. The winner appends `DisputeAcquire { new_custodian, claim_txid, new_reserves_address }` to their fork. Losers append `DisputeYield`.
+1. Each disputing member publishes `DisputeArmed` with `commitment_hash = HASH160(preimage)`, where
+   `preimage` is 17 to 76 bytes; `contribution = LEN(preimage) − 16` lies in `1..=60`.
+2. After the eligibility cut (§"Replacement collateral declaration"), the recovery quorum cosigns a
+   confiscation transaction spending the disputed reserves UTXO into the **lottery output**, built
+   for the k eligible participants.
+3. Each participant publishes its preimage (`CustodyLotteryReveal`, Kind 9106) within 72 blocks of
+   the confiscation's confirmation.
+4. If all revealed, the winner `(Σ contribution) mod k` claims through the full-set leaf. Otherwise,
+   after 72 blocks, the winner over the revealers R, `(Σ_{R} contribution) mod |R|`, claims through
+   R's subset leaf with the recovery voters' attestation.
+5. The winner appends `DisputeAcquire { new_custodian, claim_txid, new_reserves_address }` to their
+   fork. Losers append `DisputeYield`.
 
 ### Lottery Output Tapscript Tree
 
-The lottery output's tapscript tree contains:
+- **Full-set leaf**: all k preimages, `sum mod k` dispatch, no timelock.
+- **Revealer-subset leaves**: one per nonempty proper subset (`2^k − 2`), CSV 72, a threshold of
+  recovery-voter signatures attesting the subset, then that subset's preimages and `sum mod |S|`
+  dispatch.
+- **Long-tail recovery cascade** at CSV 144 / 1008 / 4032 with thresholds T / T-1 / T-2, and the
+  **timeout-recovery escape hatch** at CSV 8064 with threshold 1. Honest voters spend these only into
+  a re-arm round's lottery output (DEP-06 Phase 4), never to the accused operator.
+- A sole eligible participant (k = 1) gets a plain signature leaf in place of the claim leaves.
 
-- **Leaf 0 — Primary lottery claim.** Verifies all N preimages, enforces per-preimage size bounds (`17 <= LEN(preimage_i) <= 16+N` via `OP_SIZE OP_DUP <17> OP_GREATERTHANOREQUAL OP_VERIFY OP_DUP <16+N> OP_LESSTHANOREQUAL OP_VERIFY` immediately after each `OP_EQUALVERIFY`), computes `sum mod N`, dispatches to the matching pubkey via `OP_CHECKSIG`. The size bounds reject a committer who hashed an out-of-range preimage — without them, a malicious committer could reveal a preimage of any length, the hash check would pass (it matches what they committed to), and `contribution = LEN - 16` would take an arbitrary value that shifts `sum mod N` and corrupts the draw for the entire quorum. Three dispatch regimes by N:
-  - **Linear** (N=2..=5 and N=11..=15): repeated conditional subtraction for `sum mod N`, then linear `if/elif` cascade on the index
-  - **CombinedTable** (N=6..=10): skip the modulo; emit one dispatch arm per integer sum value in `[N, N²]` directly routing to `pubkey_(s mod N)`
-- **Leaves 1..=N** (for N≥3): K=1 partial-reveal claim leaves, one per missing-disputant index, prefixed with `OP_PUSHNUM_72 OP_CSV OP_DROP`. Each is a sub-lottery for the (N-1) revealers excluding that index, picking its own dispatch regime by N-1. The per-preimage size bounds inside each sub-leaf use the *parent* N (`17..=16+N`), not `N-1` — surviving disputants committed under the parent contract and their valid preimages may legitimately extend to length `16+N`. The floor is `N=3` because the sub-lottery needs at least 2 participants; at `N=2` a single non-revealer leaves only one possible spender, making "lottery" degenerate.
-- **Long-tail recovery cascade**: `<csv> OP_CSV OP_DROP <threshold> <pubkeys> OP_CHECKMULTISIG` at CSV 144 / 1008 / 4032 with descending thresholds T / T-1 / T-2 (where T is the recovery threshold computed at confiscation time).
-- **Timeout-recovery escape hatch**: CSV 8064 (~8 weeks) with threshold 1 — any single recovery voter can sweep if all else has failed.
-
-The internal key is the BIP-341 NUMS point (no key-path spend possible).
+Each preimage check enforces `17 ≤ LEN ≤ 76` (`OP_SIZE OP_DUP <17> OP_GREATERTHANOREQUAL OP_VERIFY
+OP_DUP <76> OP_LESSTHANOREQUAL OP_VERIFY` after the hash check), so a committer who hashed an
+out-of-range preimage can only fail its own reveal, never shift the draw. The leaf order, scripts and
+depths are specified in DEP-06 Phase 2. The internal key is the BIP-341 NUMS point.
 
 ### Witness Construction
 
-For the primary claim leaf, the witness is:
+Full-set leaf: `[signature, preimage_{k-1}, …, preimage_0, leaf_script, control_block]`, signature
+at the bottom.
 
-    [signature, preimage_{N-1}, ..., preimage_0, leaf_script, control_block]
+Subset leaf for S = (s_0 … s_{m-1}): `[signature, preimage_{s_{m-1}}, …, preimage_{s_0},
+voter_sig_{r-1}, …, voter_sig_0, leaf_script, control_block]` with empty pushes for absent voter
+signatures, and the spending input's `nSequence ≥ 72`.
 
-with the signature at the bottom of the stack. The script consumes preimages in disputant order, accumulates contributions on the altstack, computes the dispatch index, and verifies the signer's pubkey matches `pubkey_(sum mod N)`.
-
-For partial-reveal leaves (N≥3): identical layout, but only the `N-1` revealer preimages, and the spending input must have `nSequence >= 72`.
-
-For recovery leaves: standard tapscript multisig — `K` of `N` signature slots filled (with empty pushes for unused slots), and `nSequence >= csv_blocks`.
+Recovery leaves: `K` of `N` signature slots filled (empty pushes for the rest), `nSequence ≥ csv`.
 
 ### Pre-release policy cap
 
-The script supports up to N=15 disputants. The current policy in this release is `VALID_QUORUM_SIZES = {3, 5, 7}` with `MAX_QUORUM_SIZE_POLICY = 7`, enforced at `QuorumBegin` validation. `Q` is the cosigner count and excludes the operator; disputants equal `Q` exactly (every cosigner can dispute, the operator is barred from disputing their own ledger). Lifting the cap or extending the allowed set is a one-line constant change with no script or wire-format implications. See `CUSTODY_LOTTERY.md` for full design rationale.
+At most `MAX_LOTTERY_PARTICIPANTS = 7` participants (`VALID_QUORUM_SIZES = {3, 5, 7}`, `Q` excludes
+the operator, who cannot dispute its own ledger). The subset tree has `2^k − 1` claim leaves, so a
+larger cap needs a different claim construction.
 
 ### Fraud-proof classification: Respectful vs Punitive
 
@@ -278,8 +293,8 @@ claiming, is caught at claim time as a `WinnerCollateralDeviation` (below and DE
 
 The winner's claim TX has two inputs and one output:
 
-- **Input 0**: lottery output (script-path spend through the primary or
-  partial-reveal leaf — see §"Witness Construction")
+- **Input 0**: lottery output (script-path spend through the full-set or a
+  revealer-subset leaf — see §"Witness Construction")
 - **Input 1**: the disputant's declared replacement collateral UTXO,
   signed natively for whatever script controls it (typically wpkh from
   the disputant's wallet)
