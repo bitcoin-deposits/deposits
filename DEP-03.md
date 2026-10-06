@@ -273,6 +273,15 @@ slashing share, and counts as a non-arming member for the recovery quorum (it ma
 confiscation). Cosigners MUST refuse a confiscation whose participant set differs from the one
 this rule yields, and MUST NOT refuse one because an armer was excluded.
 
+**When the set is final.** The rule is deterministic over the arms a member has seen, but arms
+travel by relay: an arm whose header height is at or below the current E can reach one member
+before another and join the set without moving E. Two members may therefore compute different
+sets for a while; each refuses the other's proposal (its sighash differs), and they converge as
+the relay delivers the remaining arms. The set is **final once a confiscation confirms**: it is
+exactly the set whose lottery output the confiscation pays, and arms seen afterwards do not change
+it. Every later step (reveal, claim, attestation, armer shares, sweeps) uses that set, recovered
+from the confirmed output (members try their current cut first, then the subsets of all armers).
+
 **One participant** takes custody without a draw: the lottery's primary leaf is
 `<participant_xonly> OP_CHECKSIG` (no preimage is revealed; the recovery leaves are unchanged).
 A floor of two would hand the veto back to a colluder: one honest armer plus one colluder with a
