@@ -298,6 +298,26 @@ never disputed.
 A participant whose pledge is spent after E, or who otherwise deviates from its declaration when
 claiming, is caught at claim time as a `WinnerCollateralDeviation` (below and DEP-06), not here.
 
+### Confiscation fee
+
+Cosigners rebuild the confiscation transaction from public state and sign only an identical one,
+so its fee is a rule, not a proposer's choice:
+
+    confiscation_fee = feerate × (120 + 30 × voters)   sats
+
+where `voters` is the number of keys in the vault (the quorum members and the operator) and
+`feerate` is `reference_feerate_sat_vb` from the governing `QuorumBegin` (DEP-20 §8), or 2 sat/vB
+when none is recorded. `120 + 30 × voters` vB bounds the confiscation's size at any tier (one
+input, at most two outputs, a witness of at most one signature per voter plus the tier leaf and
+control block). Every output value then follows: the punitive shape pays `vault − fee` to the
+lottery output; the respectful shape pays `max(obligations, 330)` to it and `vault − that − fee`
+to the operator's P2WPKH, or collapses to the punitive shape if that change is below 294 sats.
+The transaction is version 2, one input at the tier's nSequence `0xfffffffd`, nLockTime the tier's
+CLTV. Cosigners MUST refuse a proposal that differs in any byte from the one they build.
+
+The lottery claim's fee is `claim_fee_floor` (above), so a participant's declared replacement
+collateral always covers it.
+
 ### Claim transaction (multi-input)
 
 The winner's claim TX has two inputs and one output:
