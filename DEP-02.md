@@ -247,7 +247,7 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 288 | nonce | 8 | ExitRequest, ExitCancel (DEP-17 replay protection) |
 | 290 | expiry | 4 | ExitRequest, ExitCancel (DEP-17 signature expiry height) |
 | 204 | witness | variable | ExitRequest, ExitCancel (descriptor satisfaction) |
-| 304 | exit_request_id | 32 | ExitCancel (`chain_hash` of the ExitRequest update) |
+| 304 | exit_request_id | 32 | ExitCancel (SHA256 of the ExitRequest operation's TLV bytes, DEP-20 §3) |
 | 306 | rotation_height | 4 | DormancyNotice, LedgerWindDown |
 | 308 | manifest_hash | 32 | DormancyNotice, DormancyAccept |
 | 288 | migration_receiver | 33 | DormancyNotice |

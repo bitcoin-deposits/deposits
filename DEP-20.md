@@ -123,9 +123,9 @@ balances.
   `exit_address` scriptPubKey) and, only when present, `expires_at_height` (int); for a cancel,
   `kind` = symbol `exit_cancel` and `exit_request_id` (bytes).
 - *Request.* Applying an `ExitRequest` requires `amount > 0` and `amount ≤` the deposit's available
-  balance, moves `amount` into `locked_balance`, and records a pending request identified by the
-  `chain_hash` of its update, with its deposit, amount, `exit_address`, `expires_at_height` and the
-  update's `block_height`.
+  balance, moves `amount` into `locked_balance`, and records a pending request identified by SHA256 of the operation's TLV bytes
+  (as signed, witness included; the depositor's nonce makes it unique), with its deposit, amount,
+  `exit_address`, `expires_at_height`, and the `block_height` and sequence of the update carrying it.
 - *Cancel.* `ExitCancel` names a pending request of the same deposit by `exit_request_id`; applying it
   unlocks the amount and removes the request. Naming no pending request is non-conforming.
 - *Expiry.* Before the operation of any update at `block_height` h is applied, every pending request
