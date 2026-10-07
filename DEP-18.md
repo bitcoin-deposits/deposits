@@ -65,8 +65,9 @@ corollary: deploying a binary that knows a new ruleset is always safe regardless
 
 ## version negotiation and refusal
 
-- **per-ledger (consensus).** the operator selects, at `QuorumUpgrade` or `QuorumBegin`, a ruleset that every member's `supported_rulesets` covers. a member that cannot validate the target blocks the change — `member_supports` returning false is a hard stop, not a warning, because a quorum that cannot uniformly validate its own rules cannot safely cosign.
-- **per-peer (transport).** the wire handshake's `protocol_version` / `min_protocol_version` (`messages::constants`) governs whether two nodes will talk at all. this is independent of the per-ledger consensus version: a node may speak the latest wire protocol while operating ledgers pinned to `legacy` consensus rules.
+- **per-ledger (consensus).** the operator selects, at `QuorumUpgrade` or `QuorumBegin`, a ruleset that every member's `supported_rulesets` covers. which covered ruleset to choose is the operator's policy (implementations choose the newest every member supports); the choice is not consensus, coverage is. a `QuorumBegin`'s ruleset MUST be the one its new reserves output was constructed under, and cosigners verify the reserves script against it (DEP-03); a rotation does not inherit the previous ruleset. a member that cannot validate the target blocks the change — `member_supports` returning false is a hard stop, not a warning, because a quorum that cannot uniformly validate its own rules cannot safely cosign.
+- **advertising is a promise.** a node MUST NOT list in `supported_rulesets` a ruleset whose cascade it cannot build and whose op rules it does not enforce. advertising a ruleset it does not enforce lets a quorum activate rules that member will cosign blindly.
+- **per-peer (transport).** the wire handshake's `protocol_version` / `min_protocol_version` (`messages::constants`) governs whether two nodes will talk at all. this is independent of the per-ledger consensus version: a node may speak the latest wire protocol while operating ledgers pinned to an older ruleset.
 
 ## downgrade, stall, and emergency paths
 

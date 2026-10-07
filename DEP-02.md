@@ -91,6 +91,17 @@ After `QuorumBegin`, the cosig entries are mandatory at whatever threshold DEP-0
 
 The first update (sequence 0) has `previous_hash` = `[0; 32]`.
 
+**Sequence.** Every update's `sequence` MUST be its predecessor's plus one. An operator-signed update
+whose `previous_hash` is the chain hash of the update at sequence k but whose `sequence` is not k + 1
+(a *skip*, or a *rewind*) is a `NonConformingUpdate` (DEP-06), provable from the update and the
+ledger's chain without cosignatures; a replica that receives one MUST treat it as that fault and
+dispute, not as a gap to backfill. An update whose `previous_hash` names no update the replica holds
+is a *gap*: the replica fetches the missing updates, and the update is not by itself fraud (DEP-06 §5).
+
+**Publication.** The operator MUST publish every update to its relays (DEP-04), including `LedgerOpen`
+(sequence 0): members identify the ledger's original operator from it, and a dispute cannot be
+confiscated without it.
+
 ## Signing
 
 All protocol signatures use Schnorr (BIP-340). On-chain transaction signatures follow bitcoin consensus rules separately.
