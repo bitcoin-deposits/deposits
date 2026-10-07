@@ -120,6 +120,34 @@ rotation_fee`; a rotation leaving it below 330 sats is invalid. Cosigners MUST r
 that differs in any byte from the one they build. Implementations agree byte for byte on the shared
 vector `rotation_tx.txt` (plain, with exits, with splice-in, with migration).
 
+### Rotation ordering
+
+A rotation is recorded before it is broadcast, so no watcher ever sees the old vault spent by a
+transaction the ledger does not yet name:
+
+1. The operator builds the rotation (above), gathers the spending tier's signatures from the
+   current members (`rotation_sign`), and assembles it. Its txid does not depend on the witness,
+   so it is known from the unsigned transaction.
+2. The operator appends the `QuorumBegin` with `spending_txid` = `new_outpoint_txid` = that txid and
+   `new_outpoint_vout` = 0. Its cosign request carries the signed transaction as `rotation_tx`
+   (hex). Instead of the on-chain outpoint check, a cosigner MUST verify that `rotation_tx` has
+   that txid; is, without its witness, byte-identical to the rotation it builds; spends the
+   replica's current vault; carries a witness satisfying a tier of that vault (valid signatures to
+   the tier's threshold); and pays output 0 `(reserves_amount + collateral_amount) / 1000` sats to
+   `reserves_id`. A `QuorumBegin` with no current vault (the first, or the first after a
+   `DisputeAcquire`) keeps the on-chain check.
+3. Once the `QuorumBegin` is published the operator broadcasts the rotation and publishes it as a
+   **Rotation Transaction** event (Kind 9107, DEP-04: `{ledger_id, sequence, tx}`), so any member
+   or watcher can broadcast it. Every cosigner of the `QuorumBegin` MUST rebroadcast it while the
+   new vault is unconfirmed and the old vault unspent.
+4. If the old vault is spent by any other transaction, that spend is an `UnauthorizedVaultSpend`
+   (DEP-06) as usual. Because cosigners verified the witness and the fee is the rule above, a
+   recorded rotation stays valid until it confirms.
+
+A vault watch therefore authorises a spend whose txid is a recorded `QuorumBegin`'s
+`new_outpoint_txid` at once; the confirmation grace (DEP-06) remains only as a backstop for a
+watcher that has not yet received the `QuorumBegin`.
+
 ### On-Chain State Anchor
 
 The rotation transaction carries no anchor: the `QuorumBegin`'s `chain_hash` commits to `new_outpoint_txid`, so the transaction cannot also commit to it. An operator MAY publish an anchor separately as an `OP_RETURN` containing the `chain_hash` at the `QuorumBegin` sequence. This gives wallets an on-chain anchor to verify that the ledger state on relays matches the operator's committed state at the time of rotation — without trusting any relay. The `OP_RETURN` output is:
