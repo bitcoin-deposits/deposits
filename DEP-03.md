@@ -316,7 +316,11 @@ The transaction is version 2, one input at the tier's nSequence `0xfffffffd`, nL
 CLTV. Cosigners MUST refuse a proposal that differs in any byte from the one they build.
 
 The lottery claim's fee is `claim_fee_floor` (above), so a participant's declared replacement
-collateral always covers it.
+collateral always covers it. Its shape is fixed too: version 2, nLockTime 0; input 0 the lottery
+output with nSequence `LOTTERY_REVEAL_CSV = 72` when spent through a revealer-subset leaf, else
+`0xfffffffd`; input 1 the declared replacement collateral at its declared value, `0xfffffffd`
+(absent only for a sole participant that declared none); one output to `target_reserves` of
+`lottery + collateral − claim_fee_floor`.
 
 ### Claim transaction (multi-input)
 
