@@ -284,6 +284,15 @@ receiving operator credits the deposit on confirmation under DEP-10. Batched exi
 therefore move balances between ledgers at one output's cost each, which makes
 spreading across operators (DEP-11 §Fund Distribution) cheap in practice.
 
+**How a wallet migrates.** It obtains a cosigned offer from the destination for the deposit it
+wants credited, with `min_sats` ≤ `floor(amount / 1000)` ≤ `max_sats`, then appends an
+`ExitRequest` paying the offer's `funding_address` with `expires_at_height` ≤ the offer's
+`deadline_block` − 6. Either the exit settles while the offer can still be completed, or it is
+released at `expires_at_height` and the balance stays on the source ledger: the migration never
+lands where no offer covers it. Once the rotation confirms, the wallet completes the offer with the
+rotation's `txid` and the exit's `vout` (its `exit_outputs` entry). Nothing here is new to the source
+ledger: a migration is an exit.
+
 ## Rationale
 
 Illiquidity ceases to be fraud: the operator can always sign locks and credits, and

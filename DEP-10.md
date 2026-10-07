@@ -14,6 +14,18 @@ An operator creates a funding offer for a deposit: a bitcoin address where funds
     data = ledger_id || offer_id || operator_x_only || len(address) || address || deadline_block_le32
     digest = SHA256(tag || tag || data || member_ledger_hash)
 
+where `ledger_id` is the 64-character lowercase hex text (ASCII), `len(address)` one byte and
+`address` the address text (ASCII). The request is `cosign_offer` with `offer_id`, `operator_id`,
+`funding_address` and `deadline_block`; the member answers `signature_hex`, `cosigner_pubkey` and
+`member_ledger_hash_hex`.
+
+**Completion.** A wallet (or anyone) names the payment with `complete_offer` (`offer_id`, `txid`,
+`vout`). The operator MUST credit it if output `vout` of `txid` pays the offer's `funding_address`
+and confirms at a height ≤ `deadline_block`, and need not credit it otherwise. The credit is an
+`OnchainCredit` naming that `txid` and `vout`, for the output's value × 1000 msat (capped at the
+offer's maximum; below its minimum it is not credited). An output confirmed by the deadline that is
+not credited is the uncredited-payment evidence of DEP-06, whenever the completion arrives.
+
 The wallet retains the offer, cosignature, and co-signer pubkey as evidence. If the operator does not credit the deposit after sufficient confirmations, this evidence is used to construct a fraud proof (see DEP-06).
 
 ### Credit (disc 35)
