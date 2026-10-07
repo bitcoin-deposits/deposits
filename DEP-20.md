@@ -157,6 +157,22 @@ funds. `reserves_amount_msats` and/or `collateral_amount_msats` rise by the adde
 value as declared; co-signers verify the outpoint and the new totals as in DEP-03
 §QuorumBegin. Splice-in is optional and unprovable if omitted.
 
+**Wire and checks.** The `QuorumBegin` records `splice_in_outpoint` (type 282: the txid in
+internal byte order ‖ vout, u32 big-endian) and `splice_in_amount_msats` (type 284), equal to the
+outpoint's value × 1000. The rotation transaction (DEP-03) spends it as input 1. Because the
+BIP-341 sighash commits to every prevout, a member asked to sign the rotation (`rotation_sign`,
+which then carries `splice_in_outpoint`) looks the outpoint up itself: it MUST be confirmed to the
+policy depth of DEP-03 §QuorumBegin and unspent, and its value and scriptPubKey enter the sighash.
+The operator signs input 1; a cosigner of the `QuorumBegin` MUST verify both inputs' witnesses
+(a recorded rotation must be broadcastable).
+
+**Amounts.** With c₀ the collateral the rotation would carry without the splice (§3 *Amounts*, with
+F the fee of the transaction actually built, splice input included), the new
+`collateral_amount_msats` is any value in [c₀, c₀ + `splice_in_amount_msats`], and `amount`
+(reserves) is the new vault's value × 1000 minus it: the operator declares how the added value
+divides, and neither part may fall below its no-splice value. The DEP-05 collateral floor applies
+as to any `QuorumBegin`.
+
 ### 5. Self-fill as inventory
 
 An operator MAY hold deposits on its own ledger. Such balances are obligations like
