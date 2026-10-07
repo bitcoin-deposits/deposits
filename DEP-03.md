@@ -96,9 +96,33 @@ The per-network default confirmation thresholds used by an honest cosigner with 
 
 After `QuorumBegin`, co-signatures become required for all subsequent updates. The *first* `QuorumBegin` itself must also carry cosignatures — see DEP-05 §QuorumBegin and DEP-02 §Cosignatures. A new `QuorumBegin` MUST be appended before `quorum_expiry` (see DEP-11).
 
+### Rotation transaction
+
+Cosigners rebuild the rotation transaction from the replica and the `QuorumBegin` they are asked to
+sign, and sign only an identical one, so its shape and fee are rules:
+
+- version 2; nLockTime the spending tier's CLTV (0 at Tier 0);
+- input 0: the current vault outpoint, nSequence `0xfffffffd`; input 1, only with a splice-in
+  (DEP-20 §4): `splice_in_outpoint`, nSequence `0xfffffffd`;
+- output 0: the new vault (the next quorum's reserves, `new_outpoint_vout` = 0); then one output per
+  `exit_outputs` entry in recorded order, valued `floor(amount_msats / 1000)`, to the exit's address
+  (DEP-20 §3); then, with a migration (DEP-20 §8.3), one output of the manifest's total to the
+  receiver's funding address. No other outputs (no anchor, see below).
+
+    rotation_vsize = 46 + 30 × voters + Σ_outputs (9 + len(script_pubkey)) + 68 × [splice-in]
+    rotation_fee   = feerate × rotation_vsize   sats
+
+where `voters` counts the keys of the vault being spent (members and operator), the sum runs over
+every output including the new vault, and `feerate` is `reference_feerate_sat_vb` from the
+`QuorumBegin` governing the spent vault, or 2 sat/vB when none is recorded (as for the
+confiscation fee). The new vault is valued `old vault + splice_in − Σ exit and migration outputs −
+rotation_fee`; a rotation leaving it below 330 sats is invalid. Cosigners MUST refuse a proposal
+that differs in any byte from the one they build. Implementations agree byte for byte on the shared
+vector `rotation_tx.txt` (plain, with exits, with splice-in, with migration).
+
 ### On-Chain State Anchor
 
-The reserves rotation transaction should include an `OP_RETURN` output containing the `chain_hash` at the `QuorumBegin` sequence. This gives wallets an on-chain anchor to verify that the ledger state on relays matches the operator's committed state at the time of rotation — without trusting any relay. The `OP_RETURN` output is:
+The rotation transaction carries no anchor: the `QuorumBegin`'s `chain_hash` commits to `new_outpoint_txid`, so the transaction cannot also commit to it. An operator MAY publish an anchor separately as an `OP_RETURN` containing the `chain_hash` at the `QuorumBegin` sequence. This gives wallets an on-chain anchor to verify that the ledger state on relays matches the operator's committed state at the time of rotation — without trusting any relay. The `OP_RETURN` output is:
 
     OP_RETURN <chain_hash (32 bytes)>
 

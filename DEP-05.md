@@ -163,7 +163,20 @@ Quorum members must maintain a full state replica of any ledger they co-sign for
 3. **Obligation limits**: the running total of obligations does not exceed reserves. This is the only limit on credits: collateral is not a cap on obligations
 4. **Collateral preservation**: operations do not reduce the collateral portion below `collateral_amount_msats`; reserves fall only through rotation exits that reduce obligations equally (DEP-20 §3)
 5. **Collateral floor** (for a `QuorumBegin`): `collateral_amount × 10000 ≥ c_min_bps × (reserves_amount + collateral_amount)`, below
-6. **No dispute filed**: the member has not filed a dispute fork for this ledger
+6. **Operator not deposed**: custody has not moved, and the ledger is not under a freezing dispute
+   (below)
+
+**Deposed operator.** A member MUST refuse to co-sign any update of the operator's chain once:
+
+- **custody has moved**: a `DisputeAcquire` on any fork of the ledger names a new custodian, or
+- **the member itself** has entered a dispute on the ledger whose `last_valid_sequence` is at or
+  after the latest `QuorumBegin`, for any reason other than `quorum_expired`, or
+- **a majority of the quorum** (`floor(n/2) + 1` of the current members) has entered such a dispute.
+
+A dispute counts in every state it reaches (open, armed, yielded or acquired). A `quorum_expired`
+dispute does **not** freeze co-signing: it is respectful, and the operator's re-establishment
+(`QuorumBegin`, DEP-05 §Lifecycle) is exactly the update its members must still be able to sign.
+Implementations agree on the cases in the shared vector `cosign_refusal.json`.
 
 If any check fails, the member MUST refuse to co-sign. The chain continuity check (1) is the primary defense against parallel chains — if the operator has published a non-conforming update that the member rejected, subsequent updates will have a different `previous_hash` and the member will refuse.
 

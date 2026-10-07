@@ -88,8 +88,8 @@ construct and collect signatures on the rotation as late in the cutoff margin as
 practical, and cosigners compute the due set from the ledger at signing time
 regardless.
 
-**Rotation transaction.** The `QuorumBegin` rotation transaction (DEP-03) spends the
-old vault into:
+**Rotation transaction.** The `QuorumBegin` rotation transaction (DEP-03 §Rotation transaction,
+which fixes its byte layout and fee) spends the old vault into:
 
 - the new vault, valued at `old vault + splice_in − Σ exits − fee`;
 - one output per settled exit request, to its `address`, aggregating requests below
