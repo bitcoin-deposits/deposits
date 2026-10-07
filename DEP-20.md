@@ -114,6 +114,38 @@ inactivity path if silent. On custody transfer, the winner's acquisition rotatio
 MUST settle all requests due at `last_valid_sequence`; the lottery output covers
 them because it covers obligations.
 
+**Wire and state rules.** These make every replica compute the same due set and the same
+balances.
+
+- *Authorisation.* `ExitRequest` and `ExitCancel` are depositor-signed like other spends: they
+  carry `nonce` and `expiry` and a `witness` over the DEP-17 operation preimage, op type `spend`,
+  with arguments `kind` = symbol `exit`, `amount` (int, msats), `destination` (bytes, the
+  `exit_address` scriptPubKey) and, only when present, `expires_at_height` (int); for a cancel,
+  `kind` = symbol `exit_cancel` and `exit_request_id` (bytes).
+- *Request.* Applying an `ExitRequest` requires `amount > 0` and `amount ≤` the deposit's available
+  balance, moves `amount` into `locked_balance`, and records a pending request identified by the
+  `chain_hash` of its update, with its deposit, amount, `exit_address`, `expires_at_height` and the
+  update's `block_height`.
+- *Cancel.* `ExitCancel` names a pending request of the same deposit by `exit_request_id`; applying it
+  unlocks the amount and removes the request. Naming no pending request is non-conforming.
+- *Expiry.* Before the operation of any update at `block_height` h is applied, every pending request
+  with `expires_at_height ≤ h` is released (unlocked and removed).
+- *Due set.* For a `QuorumBegin` that rotates a vault, at `block_height` h with `exit_cutoff_height`
+  c (h − `exit_cutoff_margin_blocks` ≤ c ≤ h; absent means c = h − margin), the due requests are the
+  pending ones whose update's `block_height ≤ c` and whose amount is at least 330 sats
+  (`amount ≥ 330 000` msats), in the order their updates were appended. Smaller requests stay
+  pending (dust is carried to a later rotation, or released by cancel or expiry).
+- *Settlement.* `exit_outputs` lists the due requests in that order, entry i with the request's
+  deposit, amount and `vout` = i + 1, and the rotation transaction (DEP-03) pays output i + 1
+  `floor(amount / 1000)` sats to its `exit_address`. Applying the `QuorumBegin` debits each entry's
+  deposit `balance` and `locked_balance` by its amount and removes the request. A `QuorumBegin`
+  with no current vault (the first, or the first after `DisputeAcquire`) settles no exits.
+- *Amounts.* With V the old vault's value and F the rotation fee (both sats), the new
+  `collateral_amount_msats` is `floor(old_collateral × (V − F) × 1000 / (old_reserves +
+  old_collateral))`, and `amount` (reserves) is the new vault's value × 1000 minus it. Exit
+  outputs therefore come out of reserves only; collateral bears only its share of the fee. With no
+  exits this is the existing proportional split.
+
 **Off-cycle settlement.** The operator MAY append a `QuorumBegin` to the same
 member set at any time to settle exits early. It resets `quorum_expiry` as any
 rotation does.

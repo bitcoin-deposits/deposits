@@ -230,7 +230,8 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 280 | exit_outputs | variable | QuorumBegin (DEP-20 §3; repeated `deposit_id(16) ‖ amount_msats(8) ‖ vout(4)`) |
 | 282 | splice_in_outpoint | 36 | QuorumBegin (DEP-20 §4; txid ‖ vout) |
 | 284 | splice_in_amount_msats | 8 | QuorumBegin (DEP-20 §4) |
-| 286 | migration_manifest | variable | QuorumBegin (DEP-20 §8.3; repeated `deposit_id(16) ‖ amount_msats(8) ‖ u16 len ‖ descriptor`) |
+| 286 | protocol_version | variable | QuorumBegin (ruleset name, DEP-18), QuorumUpgrade |
+| 316 | migration_manifest | variable | QuorumBegin (DEP-20 §8.3; repeated `deposit_id(16) ‖ amount_msats(8) ‖ u16 len ‖ descriptor`) |
 | 288 | migration_receiver | 33 | QuorumBegin (DEP-20 §8.3; receiver operator pubkey) |
 | 290 | migration_vout | 4 | QuorumBegin (DEP-20 §8.3) |
 | 292 | reference_feerate_sat_vb | 4 | QuorumBegin (DEP-20 §8; sets `dormancy_amount_msats` for the next bucket) |
@@ -243,8 +244,10 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 2 | amount | 8 | ExitRequest |
 | 300 | exit_address | variable | ExitRequest (scriptPubKey bytes) |
 | 302 | expires_at_height | 4 | ExitRequest (optional) |
+| 288 | nonce | 8 | ExitRequest, ExitCancel (DEP-17 replay protection) |
+| 290 | expiry | 4 | ExitRequest, ExitCancel (DEP-17 signature expiry height) |
 | 204 | witness | variable | ExitRequest, ExitCancel (descriptor satisfaction) |
-| 304 | exit_request_id | 32 | ExitCancel (hash of the ExitRequest update) |
+| 304 | exit_request_id | 32 | ExitCancel (`chain_hash` of the ExitRequest update) |
 | 306 | rotation_height | 4 | DormancyNotice, LedgerWindDown |
 | 308 | manifest_hash | 32 | DormancyNotice, DormancyAccept |
 | 288 | migration_receiver | 33 | DormancyNotice |
