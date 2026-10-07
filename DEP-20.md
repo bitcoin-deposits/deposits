@@ -129,11 +129,15 @@ balances.
 - *Cancel.* `ExitCancel` names a pending request of the same deposit by `exit_request_id`; applying it
   unlocks the amount and removes the request. Naming no pending request is non-conforming.
 - *Expiry.* Before the operation of any update at `block_height` h is applied, every pending request
-  with `expires_at_height ≤ h` is released (unlocked and removed).
+  with `expires_at_height ≤ h` is released (unlocked and removed); for a rotating `QuorumBegin` the
+  release comes after its settlement, so a request due under the cutoff settles.
 - *Due set.* For a `QuorumBegin` that rotates a vault, at `block_height` h with `exit_cutoff_height`
   c (h − `exit_cutoff_margin_blocks` ≤ c ≤ h; absent means c = h − margin), the due requests are the
-  pending ones whose update's `block_height ≤ c` and whose output clears the dust floor after its
-  own cost (below), in the order their updates were appended. Other requests stay pending (dust is
+  pending ones whose update's `block_height ≤ c`, with no `expires_at_height` or one > c, and whose
+  output clears the dust floor after its own cost (below), in the order their updates were
+  appended. The due set is a function of the ledger and c alone, so every member computes it alike
+  whatever its own chain tip. A member asked to sign the rotation (`rotation_sign`, which carries
+  c) accepts any c within [tip − margin − 6, tip + 6] of its own tip. Other requests stay pending (dust is
   carried to a later rotation, or released by cancel or expiry).
 - *Who pays.* Each exit pays only its own output's marginal cost,
   `exit_cost = feerate × (9 + len(exit_address))` sats, with `feerate` the rotation's (DEP-03); the
@@ -239,7 +243,8 @@ balance, output fee borne by the operator.
   `DepositOpen`'s. Receives and fee collections are not activity.
 - *Notice.* `DormancyNotice` (op 102) carries `rotation_height` (306) ≥ the notice's
   `block_height` + `dormancy_notice_blocks`. One notice is outstanding at a time; it is consumed by
-  the first rotating `QuorumBegin` at a `block_height` ≥ `rotation_height`.
+  the first rotating `QuorumBegin` whose `exit_cutoff_height` is ≥ `rotation_height` (so, like the
+  exits' due set, the spin-outs depend on the recorded cutoff, not on any member's tip).
 - *Bucket.* At that `QuorumBegin`, the bucket is every deposit with a positive balance, no locked
   balance and no pending exit, whose signed activity is ≤ the notice's `block_height` −
   `dormancy_blocks`. Activity after the notice removes a deposit (its signed activity moves past
