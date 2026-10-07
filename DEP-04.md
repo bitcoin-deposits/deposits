@@ -23,6 +23,7 @@ Wallets connect to both: operator relays for requests, ledger relays for reading
 | 9101 | Fraud Proof | Durable | deposits-node | Fraud proof broadcast (JSON, see DEP-06) |
 | 9103 | Dispute | Durable | deposits-node | Custody dispute notification (JSON) |
 | 9104 | Recovery Agreement | Durable | deposits-node | Quorum member recovery agreement (JSON) |
+| 9110 | Dormancy Offer | Durable | deposits-node | A dormancy bucket offered to a receiver (JSON, DEP-20 §8.3): `{ledger_id, manifest, manifest_hash, total_msats, premium_msats}` |
 | 9107 | Rotation Transaction | Durable | deposits-node | The signed rotation a `QuorumBegin` names: `{ledger_id, sequence, tx}` (JSON, see DEP-03 §Rotation ordering) |
 | 9106 | Custody Lottery Reveal | Durable | deposits-node | Disputant's preimage reveal during the on-chain lottery (JSON, see DEP-06 §Phase 3) |
 | 20101 | Request | Ephemeral | deposits-node, wallet | Wallet-to-operator request (JSON) |

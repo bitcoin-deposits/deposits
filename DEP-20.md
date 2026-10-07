@@ -132,19 +132,24 @@ balances.
   with `expires_at_height ≤ h` is released (unlocked and removed).
 - *Due set.* For a `QuorumBegin` that rotates a vault, at `block_height` h with `exit_cutoff_height`
   c (h − `exit_cutoff_margin_blocks` ≤ c ≤ h; absent means c = h − margin), the due requests are the
-  pending ones whose update's `block_height ≤ c` and whose amount is at least 330 sats
-  (`amount ≥ 330 000` msats), in the order their updates were appended. Smaller requests stay
-  pending (dust is carried to a later rotation, or released by cancel or expiry).
+  pending ones whose update's `block_height ≤ c` and whose output clears the dust floor after its
+  own cost (below), in the order their updates were appended. Other requests stay pending (dust is
+  carried to a later rotation, or released by cancel or expiry).
+- *Who pays.* Each exit pays only its own output's marginal cost,
+  `exit_cost = feerate × (9 + len(exit_address))` sats, with `feerate` the rotation's (DEP-03); the
+  vault pays the rest of the rotation. The output is `floor(amount / 1000) − exit_cost` sats and is
+  due only if that is at least 330.
 - *Settlement.* `exit_outputs` lists the due requests in that order, entry i with the request's
   deposit, amount and `vout` = i + 1, and the rotation transaction (DEP-03) pays output i + 1
-  `floor(amount / 1000)` sats to its `exit_address`. Applying the `QuorumBegin` debits each entry's
+  `floor(amount / 1000) − exit_cost` sats to its `exit_address`. Applying the `QuorumBegin` debits each entry's
   deposit `balance` and `locked_balance` by its amount and removes the request. A `QuorumBegin`
   with no current vault (the first, or the first after `DisputeAcquire`) settles no exits.
-- *Amounts.* With V the old vault's value and F the rotation fee (both sats), the new
-  `collateral_amount_msats` is `floor(old_collateral × (V − F) × 1000 / (old_reserves +
-  old_collateral))`, and `amount` (reserves) is the new vault's value × 1000 minus it. Exit
-  outputs therefore come out of reserves only; collateral bears only its share of the fee. With no
-  exits this is the existing proportional split.
+- *Amounts.* With V the old vault's value, F the rotation fee and E the sum of the settled exits'
+  `exit_cost` (all sats), the vault's own share of the fee is F_v = F − E, the new
+  `collateral_amount_msats` is `floor(old_collateral × (V − F_v) × 1000 / (old_reserves +
+  old_collateral))`, and `amount` (reserves) is the new vault's value × 1000 minus it. Exits
+  therefore come out of reserves only and pay their own outputs; collateral bears only its share of
+  the base fee. With no exits this is the existing proportional split.
 
 **Off-cycle settlement.** The operator MAY append a `QuorumBegin` to the same
 member set at any time to settle exits early. It resets `quorum_expiry` as any
@@ -222,6 +227,34 @@ that includes a deposit outside the bucket or omits one inside it.
 whose descriptor yields a bitcoin address are spun out as exit outputs (§3), full
 balance, output fee borne by the operator.
 
+**Precise rules (8.1–8.2).** These make every replica compute the same bucket.
+
+- *Parameters.* `dormancy_blocks` (type 318) and `dormancy_notice_blocks` (type 332) are optional on
+  `QuorumAddMember`; the largest value among the promoted members applies, defaulting to 26280 and
+  2016. `dormancy_amount_msats` = 10 × 34 × `reference_feerate_sat_vb` × 1000, with the governing
+  `QuorumBegin`'s feerate (DEP-03 §Reference feerate; 2 when none).
+- *Signed activity* of a deposit is the `block_height` of the latest update carrying a
+  depositor-signed operation it spends from or authorises: `InvoiceLock`, `OnchainLock`,
+  `TransferLock` (source), `DepositKeyRotate`, `ExitRequest`, `ExitCancel`; initially its
+  `DepositOpen`'s. Receives and fee collections are not activity.
+- *Notice.* `DormancyNotice` (op 102) carries `rotation_height` (306) ≥ the notice's
+  `block_height` + `dormancy_notice_blocks`. One notice is outstanding at a time; it is consumed by
+  the first rotating `QuorumBegin` at a `block_height` ≥ `rotation_height`.
+- *Bucket.* At that `QuorumBegin`, the bucket is every deposit with a positive balance, no locked
+  balance and no pending exit, whose signed activity is ≤ the notice's `block_height` −
+  `dormancy_blocks`. Activity after the notice removes a deposit (its signed activity moves past
+  the bound).
+- *Addressable.* A deposit is addressable when its descriptor is `pk(K)`; its address is the
+  key-path P2TR with K's x-only key as internal key (no script tree). Others are not addressable.
+- *Spin-out.* Bucket deposits with balance ≥ `dormancy_amount_msats` that are addressable are paid
+  `floor(balance / 1000)` sats each, in ascending `deposit_id` order, as rotation outputs after the
+  §3 exits. The `QuorumBegin` records them as `dormancy_outputs` (336), entry j with the deposit,
+  its full balance and its vout; applying it debits each deposit's balance to zero. Their output
+  costs D = Σ `feerate × (9 + 34)` come out of collateral: with the vault's base share of the fee
+  F_v = F − E − D (§3 *Amounts*), the new `collateral_amount_msats` is
+  `floor(old_collateral × (V − F_v) × 1000 / (old_reserves + old_collateral)) − 1000 × D`. A `QuorumBegin` that consumes a notice and records any other
+  set of `dormancy_outputs` is `NonConforming`.
+
 **8.3 Small, or non-addressable: negotiated migration.** All other bucket
 deposits are migrated together to a receiver that has agreed in advance:
 
@@ -252,10 +285,10 @@ deposits are migrated together to a receiver that has agreed in advance:
 If no receiver accepts, small bucket deposits stay and continue to pay fees; the
 operator MAY re-offer. No party is obliged to take a bucket.
 
-**8.4 Who pays.** The initiator of an exit pays its output. A depositor's
-`ExitRequest` is debited its share of the rotation fee; dormancy and wind-down
-outputs are paid in full by the operator. Timing a forced move into high fees
-costs the operator, not the depositor.
+**8.4 Who pays.** The initiator of an exit pays its output's marginal cost (§3
+*Who pays*): a depositor's `ExitRequest` bears its own `exit_cost`; dormancy and wind-down
+outputs are paid in full by the operator, from collateral. The vault pays the base rotation.
+Timing a forced move into high fees costs the operator, not the depositor.
 
 ### 9. Wind-down
 
@@ -285,7 +318,7 @@ therefore move balances between ledgers at one output's cost each, which makes
 spreading across operators (DEP-11 §Fund Distribution) cheap in practice.
 
 **How a wallet migrates.** It obtains a cosigned offer from the destination for the deposit it
-wants credited, with `min_sats` ≤ `floor(amount / 1000)` ≤ `max_sats`, then appends an
+wants credited, with `min_sats` ≤ the exit's output value (`floor(amount / 1000) − exit_cost`) ≤ `max_sats`, then appends an
 `ExitRequest` paying the offer's `funding_address` with `expires_at_height` ≤ the offer's
 `deadline_block` − 6. Either the exit settles while the offer can still be completed, or it is
 released at `expires_at_height` and the balance stays on the source ledger: the migration never

@@ -254,6 +254,9 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 310 | offer_event_id | 32 | DormancyAccept (Kind 9110 event id) |
 | 312 | accepted_total_msats | 8 | DormancyAccept |
 | 314 | min_collateral_bps | 2 | QuorumAddMember (DEP-05 §"Collateral floor"; optional, basis points of the vault) |
+| 318 | dormancy_blocks | 4 | QuorumAddMember (DEP-20 §8; optional, the largest staged value applies, default 26280) |
+| 332 | dormancy_notice_blocks | 4 | QuorumAddMember (DEP-20 §8; optional, the largest staged value applies, default 2016) |
+| 336 | dormancy_outputs | variable | QuorumBegin (DEP-20 §8.2; repeated `deposit_id(16) ‖ amount_msats(8) ‖ vout(4)`) |
 
 #### Deposits
 

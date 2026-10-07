@@ -113,12 +113,26 @@ sign, and sign only an identical one, so its shape and fee are rules:
     rotation_fee   = feerate × rotation_vsize   sats
 
 where `voters` counts the keys of the vault being spent (members and operator), the sum runs over
-every output including the new vault, and `feerate` is `reference_feerate_sat_vb` from the
+every output including the new vault (each exit output already bears its own share, DEP-20 §3), and `feerate` is `reference_feerate_sat_vb` from the
 `QuorumBegin` governing the spent vault, or 2 sat/vB when none is recorded (as for the
 confiscation fee). The new vault is valued `old vault + splice_in − Σ exit and migration outputs −
 rotation_fee`; a rotation leaving it below 330 sats is invalid. Cosigners MUST refuse a proposal
 that differs in any byte from the one they build. Implementations agree byte for byte on the shared
 vector `rotation_tx.txt` (plain, with exits, with splice-in, with migration).
+
+### Reference feerate
+
+A rotating `QuorumBegin` records `reference_feerate_sat_vb` (DEP-02 type 292); it governs the next
+rotation, confiscation and claim of the vault it creates, and the dormancy floor (DEP-20 §8). With
+`h` the `QuorumBegin`'s `block_height`, cosigners compute
+
+    block_feerate(b) = floor(4 × Σ fee / Σ weight) over b's non-coinbase transactions, 0 if none
+                       (Bitcoin Core's getblockstats `avgfeerate`)
+    m = floor((s₃ + s₄) / 2), s₁ ≤ … ≤ s₆ the block_feerates of the blocks at heights h−6 … h−1
+
+and MUST refuse a recorded feerate outside `[max(1, floor(m / 2)), max(2, 2 × m)]`. Every input is
+block data, so every cosigner computes the same bounds. A `QuorumBegin` that records none governs
+at 2 sat/vB.
 
 ### Rotation ordering
 
