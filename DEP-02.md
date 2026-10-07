@@ -250,6 +250,7 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 288 | migration_receiver | 33 | DormancyNotice |
 | 310 | offer_event_id | 32 | DormancyAccept (Kind 9110 event id) |
 | 312 | accepted_total_msats | 8 | DormancyAccept |
+| 314 | min_collateral_bps | 2 | QuorumAddMember (DEP-05 §"Collateral floor"; optional, basis points of the vault) |
 
 #### Deposits
 

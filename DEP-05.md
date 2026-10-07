@@ -87,6 +87,21 @@ The operator's UTXO is split into two portions:
 
 Both live in the same Taproot output, controlled by the same quorum via tiered spending paths (see DEP-03). Both `reserves_amount_msats` and `collateral_amount_msats` are declared in `LedgerOpen` and `QuorumBegin`. Co-signers MUST verify that `reserves_amount_msats + collateral_amount_msats` equals the on-chain UTXO value (in msats). `QuorumBegin` may update either value (e.g., to adjust the ratio), subject to quorum member agreement via co-signature.
 
+### Collateral floor
+
+Collateral is a floor on the vault's split, not a cap on credits. Each member MAY require a
+minimum collateral share in its `QuorumAddMember` (`min_collateral_bps`, DEP-02 type 314); the
+quorum's floor is
+
+    c_min_bps = max(2000, min_collateral_bps of every member the QuorumBegin promotes)
+
+and every `QuorumBegin` MUST satisfy `collateral_amount × 10000 ≥ c_min_bps × (reserves_amount +
+collateral_amount)`. The spec-wide lower bound of 2000 bps (20%, so the deposits' share R ≤ 0.8)
+follows the collateral-ratio analysis (cl-deposits docs/TRUST-MODEL.md §2h), beyond which the
+collusion tolerance falls below a quarter of operators in every seating; quorums attested under
+DEP-21 might later justify a lower bound. A cosigned `QuorumBegin` below the floor is
+`NonConforming` (DEP-19 §5).
+
 ### Slashing
 
 When the operator is proven non-conforming (see DEP-06), the quorum confiscates the entire UTXO. The collateral portion is the operator's real loss — deposits are owed back to depositors, and reserves not covering obligations are the operator's own funds (an operator may hold deposits on their own ledger, so excess reserves are not a dependable penalty). The lottery winner (see DEP-03) takes over the ledger and inherits obligations; the slashed value (excess reserves + the operator's full collateral) is split equally among the `Q` cosigners, and the winner provides *replacement* collateral on lottery claim. Operating a ledger is a service commitment, not a windfall — the winner's economics post-takeover are roughly neutral, and the slashing reward is shared evenly so every cosigner is uniformly incentivized to dispute.
@@ -145,9 +160,10 @@ Quorum members must maintain a full state replica of any ledger they co-sign for
 
 1. **Chain continuity**: the update's `previous_hash` matches the member's last validated `chain_hash`
 2. **State validity**: the operation can be applied to the member's local state replica without error (deposit exists, sufficient balance, valid fees, etc.)
-3. **Obligation limits**: the running total of obligations does not exceed reserves
+3. **Obligation limits**: the running total of obligations does not exceed reserves. This is the only limit on credits: collateral is not a cap on obligations
 4. **Collateral preservation**: operations do not reduce the collateral portion below `collateral_amount_msats`; reserves fall only through rotation exits that reduce obligations equally (DEP-20 §3)
-5. **No dispute filed**: the member has not filed a dispute fork for this ledger
+5. **Collateral floor** (for a `QuorumBegin`): `collateral_amount × 10000 ≥ c_min_bps × (reserves_amount + collateral_amount)`, below
+6. **No dispute filed**: the member has not filed a dispute fork for this ledger
 
 If any check fails, the member MUST refuse to co-sign. The chain continuity check (1) is the primary defense against parallel chains — if the operator has published a non-conforming update that the member rejected, subsequent updates will have a different `previous_hash` and the member will refuse.
 
