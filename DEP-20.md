@@ -313,7 +313,9 @@ operator MAY re-offer. No party is obliged to take a bucket.
 - *Migration.* At the consuming `QuorumBegin` the migrated deposits are those in the manifest that
   are in the bucket and not spun out (§8.2), each at its balance there, taken in ascending deposit
   id when the running total plus it plus `premium_msats` stays ≤ `accepted_total_msats` (the
-  accept reserves the premium's credit too) and skipped otherwise; the rest stay. The rotation pays one
+  accept reserves the premium's credit too) and skipped otherwise; the rest stay. If the output
+  would be below 330 sats (the dust floor, as for exits) nothing migrates and the notice is
+  consumed as usual. The rotation pays one
   output, after the spin-outs, to the accept's `exit_address`: `floor(Σ / 1000) + premium` sats.
   The `QuorumBegin` records `migration_manifest` (the migrated entries), `migration_receiver` and
   `migration_vout`, and debits each migrated deposit to zero. The output's own cost
