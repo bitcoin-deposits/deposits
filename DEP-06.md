@@ -50,6 +50,22 @@ detection; in JSON it is serialised as lowercase hex, like every other hash. `re
 and the member's active update are carried but not hashed. The proof is self-evident (the member's own
 signed update after the window is the evidence) and needs no embedding.
 
+For `UncreditedOnchainPayment` with DEP-20 §8.3 migration evidence (JSON variant
+`UncreditedMigration`), `accused_pubkey` is the receiver, `ledger_id` its ledger, and
+
+    evidence_bytes = ascii_hex(source_notice_update) || ascii_hex(source_qb_update) || confirmed_at_block_hash || u64_le(proof_sequence)
+
+The two updates are the source's signed `DormancyNotice` (carrying the receiver's signed
+`DormancyAccept` and the offered manifest) and its signed `QuorumBegin` that paid the migration;
+`service_response_blocks` is carried, not hashed. A verifier requires: both updates the same
+operator's on one ledger, the notice first; the accept the accused's on `ledger_id`, over the
+notice's `manifest_hash`, and unexpired at the `QuorumBegin`'s block height; the `QuorumBegin`'s
+`migration_receiver` the accused and its migrated entries all in the manifest;
+`confirmed_at_block_hash` on its chain; the accused's update at `proof_sequence` at least
+`service_response_blocks` later; and some migrated entry without an `OnchainCredit` of its deposit
+and exact amount naming (`new_outpoint_txid`, `migration_vout`) at or before `proof_sequence`. It
+needs embedding, like other uncredited-payment proofs.
+
 For `UnauthorizedVaultSpend`, `accused_pubkey` is one witness signer, `ledger_id` is a ledger that signer operates (the one the proof is presented on), and
 
     evidence_bytes = ascii_hex(spent_ledger_id) || u64_le(governing_quorumbegin_seq) || ascii_hex(spend_tx) || spend_block_hash

@@ -290,6 +290,53 @@ deposits are migrated together to a receiver that has agreed in advance:
 If no receiver accepts, small bucket deposits stay and continue to pay fees; the
 operator MAY re-offer. No party is obliged to take a bucket.
 
+**Precise rules (8.3).**
+
+- *Offer.* `DormancyOffer` (Kind 9110) is `{ledger_id, manifest, manifest_hash, total_msats,
+  premium_msats}`: `manifest` lists, for each deposit offered, its id, balance, fee schedule and
+  descriptor; `manifest_hash` is SHA256 of the manifest encoded as `migration_manifest` (type 316).
+- *Accept.* The receiver appends `DormancyAccept` (op 103) to its own ledger: `offer_event_id`,
+  `manifest_hash`, `accepted_total_msats`, `exit_address` (the scriptPubKey the migration output
+  pays, of the same type as the receiver's DEP-10 funding offers), `expires_at_height`, and
+  optionally `deposit_id`, its own deposit credited the premium. Its cosigners, given the manifest
+  in the cosign request, MUST check its hash; that obligations + the totals of its unexpired
+  uncredited accepts + `accepted_total_msats` ≤ reserves; that its quorum's fee floors (DEP-05)
+  are ≤ every manifest deposit's schedule; and that it has no other accept outstanding (one
+  migration at a time). Until credited or past `expires_at_height`, an accepted total counts
+  against the receiver's capacity.
+- *Notice.* The source's `DormancyNotice` names `migration_receiver`, `manifest_hash`, and carries
+  the offered `migration_manifest` (316, hashing to `manifest_hash`), `dormancy_accept` (338), the
+  receiver's signed `DormancyAccept` update, and `premium_msats` (340, whole satoshis, optional). Source cosigners verify it
+  without fetching the receiver's ledger: it decodes, its operator signature is by
+  `migration_receiver`, it names this `manifest_hash`, and its `expires_at_height` is after the
+  notice's `rotation_height`.
+- *Migration.* At the consuming `QuorumBegin` the migrated deposits are those in the manifest that
+  are in the bucket and not spun out (§8.2), each at its balance there, taken in ascending deposit
+  id when the running total plus it plus `premium_msats` stays ≤ `accepted_total_msats` (the
+  accept reserves the premium's credit too) and skipped otherwise; the rest stay. The rotation pays one
+  output, after the spin-outs, to the accept's `exit_address`: `floor(Σ / 1000) + premium` sats.
+  The `QuorumBegin` records `migration_manifest` (the migrated entries), `migration_receiver` and
+  `migration_vout`, and debits each migrated deposit to zero. The output's own cost
+  (`feerate × (9 + len)`, a fee in `F_v`'s accounting like a spin-out's) and the premium (value
+  paid out, not a fee) both come out of collateral: the §3 collateral is further reduced by
+  `1000 × (cost + premium)`.
+- *Credit.* Once the output confirms, the receiver appends, for each manifest entry, a
+  `DepositOpen` with its descriptor and fee schedule if the deposit is new, then an `OnchainCredit`
+  of its exact amount naming the rotation txid and `migration_vout` (several credits name one
+  outpoint) with `funding_address` = `migration:` ‖ hex(`manifest_hash`), and the premium to the
+  accept's `deposit_id` the same way. Migration credits draw on the accept's reservation, not on
+  free capacity. The receiver absorbs the sub-satoshi
+  remainder of `floor(Σ / 1000)`.
+- *Splice.* The receiver MUST splice the migration output into its vault (§4) at its next rotating
+  `QuorumBegin`. Its ledger records the outpoint at the first migration credit; a rotating
+  `QuorumBegin` that does not splice it is `NonConforming` (DEP-19 §5): the obligation was
+  credited, and the coins backing it must join the vault. The splice closes the accept.
+- *Proof.* A receiver that has not credited every migrated entry `service_response_blocks` after
+  the migration output confirms is proved by `UncreditedOnchainPayment` with migration evidence
+  (DEP-06): the source's `DormancyNotice` update (which carries the receiver's signed accept and
+  the manifest), the source's `QuorumBegin` update (migrated entries, receiver, vout, rotation
+  txid), and the confirming block; the verifier checks the receiver's ledger for the credits.
+
 **8.4 Who pays.** The initiator of an exit pays its output's marginal cost (§3
 *Who pays*): a depositor's `ExitRequest` bears its own `exit_cost`; dormancy and wind-down
 outputs are paid in full by the operator, from collateral. The vault pays the base rotation.

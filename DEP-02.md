@@ -231,7 +231,7 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 282 | splice_in_outpoint | 36 | QuorumBegin (DEP-20 §4; txid ‖ vout) |
 | 284 | splice_in_amount_msats | 8 | QuorumBegin (DEP-20 §4) |
 | 286 | protocol_version | variable | QuorumBegin (ruleset name, DEP-18), QuorumUpgrade |
-| 316 | migration_manifest | variable | QuorumBegin (DEP-20 §8.3; repeated `deposit_id(16) ‖ amount_msats(8) ‖ u16 len ‖ descriptor`) |
+| 316 | migration_manifest | variable | QuorumBegin (DEP-20 §8.3; repeated `deposit_id(16) ‖ amount_msats(8) ‖ annualized_msats(8) ‖ annualized_bps(2) ‖ frequency_blocks(4) ‖ u16 len ‖ descriptor`) |
 | 288 | migration_receiver | 33 | QuorumBegin (DEP-20 §8.3; receiver operator pubkey) |
 | 290 | migration_vout | 4 | QuorumBegin (DEP-20 §8.3) |
 | 292 | reference_feerate_sat_vb | 4 | QuorumBegin (DEP-20 §8; sets `dormancy_amount_msats` for the next bucket) |
@@ -251,8 +251,14 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 306 | rotation_height | 4 | DormancyNotice, LedgerWindDown |
 | 308 | manifest_hash | 32 | DormancyNotice, DormancyAccept |
 | 288 | migration_receiver | 33 | DormancyNotice |
+| 338 | dormancy_accept | variable | DormancyNotice (the receiver's signed `DormancyAccept` update, DEP-20 §8.3) |
+| 316 | migration_manifest | variable | DormancyNotice (the offered manifest; its SHA256 is `manifest_hash`) |
+| 340 | premium_msats | 8 | DormancyNotice (DEP-20 §8.3; a multiple of 1000) |
 | 310 | offer_event_id | 32 | DormancyAccept (Kind 9110 event id) |
 | 312 | accepted_total_msats | 8 | DormancyAccept |
+| 300 | exit_address | variable | DormancyAccept (the receiver's funding scriptPubKey) |
+| 302 | expires_at_height | 4 | DormancyAccept |
+| 200 | deposit_id | 16 | DormancyAccept (optional: the receiver's deposit credited the premium) |
 | 314 | min_collateral_bps | 2 | QuorumAddMember (DEP-05 §"Collateral floor"; optional, basis points of the vault) |
 | 318 | dormancy_blocks | 4 | QuorumAddMember (DEP-20 §8; optional, the largest staged value applies, default 26280) |
 | 332 | dormancy_notice_blocks | 4 | QuorumAddMember (DEP-20 §8; optional, the largest staged value applies, default 2016) |
