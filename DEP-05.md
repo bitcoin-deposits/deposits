@@ -36,7 +36,7 @@ Members also specify timing parameters that govern protocol obligations (see DEP
 
 - **dispute_response_blocks**: blocks before a member must respond to embedded fraud evidence
 - **dispute_arm_blocks**: blocks after `DisputeEnter` during which members must arm for the lottery
-- **service_response_blocks**: blocks before an unprocessed signed request becomes provable censorship
+- **service_response_blocks**: blocks before an unprocessed signed request becomes provable censorship (the largest a seated member declared governs; 72 when no member declared one)
 - **max_transfer_timeout_blocks**: maximum `timeout_height` distance for `TransferLock`
 - **inactivity_blocks**: blocks without a co-signed update before a majority may attest inactivity (DEP-19)
 - **cosign_response_blocks**: blocks to co-sign or refuse a visible proposal (DEP-19 §9)
