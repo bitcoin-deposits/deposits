@@ -63,8 +63,11 @@ notice's `manifest_hash`, and unexpired at the `QuorumBegin`'s block height; the
 `migration_receiver` the accused and its migrated entries all in the manifest;
 `confirmed_at_block_hash` on its chain; the accused's update at `proof_sequence` at least
 `service_response_blocks` later; and some migrated entry without an `OnchainCredit` of its deposit
-and exact amount naming (`new_outpoint_txid`, `migration_vout`) at or before `proof_sequence`. It
-needs embedding, like other uncredited-payment proofs.
+and exact amount naming (`new_outpoint_txid`, `migration_vout`) at or before `proof_sequence`.
+Unlike offer evidence it is self-evident and needs no embedding: every element is a signed update
+or a block on the verifier's chain, and the accused's own update at `proof_sequence` dates the
+failure. Any node holding the source ledger may produce it; a receiver whose next rotating
+`QuorumBegin` omits the splice is instead caught by `NonConformingUpdate`.
 
 For `UnauthorizedVaultSpend`, `accused_pubkey` is one witness signer, `ledger_id` is a ledger that signer operates (the one the proof is presented on), and
 
