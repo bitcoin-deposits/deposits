@@ -333,11 +333,13 @@ operator MAY re-offer. No party is obliged to take a bucket.
   `QuorumBegin`. Its ledger records the outpoint at the first migration credit; a rotating
   `QuorumBegin` that does not splice it is `NonConforming` (DEP-19 §5): the obligation was
   credited, and the coins backing it must join the vault. The splice closes the accept.
-- *Proof.* A receiver that has not credited every migrated entry `service_response_blocks` after
-  the migration output confirms is proved by `UncreditedOnchainPayment` with migration evidence
-  (DEP-06): the source's `DormancyNotice` update (which carries the receiver's signed accept and
-  the manifest), the source's `QuorumBegin` update (migrated entries, receiver, vout, rotation
-  txid), and the confirming block; the verifier checks the receiver's ledger for the credits.
+- *Proof.* A receiver that has not credited every migrated entry within its own
+  `service_response_blocks` (its governing terms at the accept, never a value a proof carries)
+  after the migration output confirms is proved by `UncreditedOnchainPayment` with migration
+  evidence (DEP-06): the source's `DormancyNotice` update (which carries the receiver's signed
+  accept and the manifest), the source's `QuorumBegin` update (migrated entries, receiver, vout,
+  rotation txid), the receiver's signed update past the deadline, and the confirming block; the
+  verifier checks the receiver's ledger for the credits.
 
 **8.4 Who pays.** The initiator of an exit pays its output's marginal cost (§3
 *Who pays*): a depositor's `ExitRequest` bears its own `exit_cost`; dormancy and wind-down

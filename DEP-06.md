@@ -53,21 +53,26 @@ signed update after the window is the evidence) and needs no embedding.
 For `UncreditedOnchainPayment` with DEP-20 §8.3 migration evidence (JSON variant
 `UncreditedMigration`), `accused_pubkey` is the receiver, `ledger_id` its ledger, and
 
-    evidence_bytes = ascii_hex(source_notice_update) || ascii_hex(source_qb_update) || confirmed_at_block_hash || u64_le(proof_sequence)
+    evidence_bytes = ascii_hex(source_notice_update) || ascii_hex(source_qb_update) || ascii_hex(proof_update) || confirmed_at_block_hash
 
-The two updates are the source's signed `DormancyNotice` (carrying the receiver's signed
+The two source updates are the source's signed `DormancyNotice` (carrying the receiver's signed
 `DormancyAccept` and the offered manifest) and its signed `QuorumBegin` that paid the migration;
-`service_response_blocks` is carried, not hashed. A verifier requires: both updates the same
-operator's on one ledger, the notice first; the accept the accused's on `ledger_id`, over the
-notice's `manifest_hash`, and unexpired at the `QuorumBegin`'s block height; the `QuorumBegin`'s
+`proof_update` is the receiver's own signed update whose signed header dates the failure. The
+deadline is **never carried**: it is the receiver's governing `service_response_blocks` at the
+accept — the largest value declared (`QuorumAddMember`) by a member of the `QuorumBegin` governing
+the accept's sequence, 72 if none — read from the receiver's history; a verifier ignores any
+deadline a proof carries. A verifier requires: both source updates the same operator's on one
+ledger, the notice first; the accept the accused's on `ledger_id`, over the notice's
+`manifest_hash`, and unexpired at the `QuorumBegin`'s block height; the `QuorumBegin`'s
 `migration_receiver` the accused and its migrated entries all in the manifest;
-`confirmed_at_block_hash` on its chain; the accused's update at `proof_sequence` at least
-`service_response_blocks` later; and some migrated entry without an `OnchainCredit` of its deposit
-and exact amount naming (`new_outpoint_txid`, `migration_vout`) at or before `proof_sequence`.
-Unlike offer evidence it is self-evident and needs no embedding: every element is a signed update
-or a block on the verifier's chain, and the accused's own update at `proof_sequence` dates the
-failure. Any node holding the source ledger may produce it; a receiver whose next rotating
-`QuorumBegin` omits the splice is instead caught by `NonConformingUpdate`.
+`confirmed_at_block_hash` on its chain; `proof_update` signed by the accused on `ledger_id`,
+present in its history, its block on the verifier's chain at its signed height, at least the
+deadline after the confirming block; and some migrated entry without an `OnchainCredit` of its
+deposit and exact amount naming (`new_outpoint_txid`, `migration_vout`) at or before
+`proof_update`'s sequence. It is self-evident and needs no embedding: every element is a signed
+update or a block on the verifier's chain. Any node holding the source ledger may produce it; a
+receiver whose next rotating `QuorumBegin` omits the splice is instead caught by
+`NonConformingUpdate`.
 
 For `UnauthorizedVaultSpend`, `accused_pubkey` is one witness signer, `ledger_id` is a ledger that signer operates (the one the proof is presented on), and
 
