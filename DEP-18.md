@@ -79,6 +79,7 @@ corollary: deploying a binary that knows a new ruleset is always safe regardless
 ## worked example: the dep-07 fee-assessment cap
 
 - the **operator-side** cap in `calculate_fees_due` (`assessed_blocks = min(blocks_elapsed, frequency_blocks)`) is safe to deploy immediately and unconditionally. it only ever makes the operator collect *less*, which is conforming under every ruleset, including `legacy`.
+- *(superseded: `FeeExceedsAssessment` is now a rule of every ruleset, dep-07; the history below is kept as the example of the mechanism.)*
 - the **consensus rule** `FeeExceedsAssessment` — cosigners rejecting a `FeeCollect` whose `amount` exceeds the one-period assessment — is part of ruleset **`fee-cap-v3`**, which shares the `cltv-offset-v2` reserves-cascade family (no on-chain change). it activates per-ledger via **`QuorumUpgrade`**. until a ledger is upgraded to `fee-cap-v3`:
   - cosigners do **not** enforce the amount cap (they still enforce the pre-versioning `FeeWindowNotElapsed` timing check), and
   - an over-cap `FeeCollect` is **not** a confiscation basis.

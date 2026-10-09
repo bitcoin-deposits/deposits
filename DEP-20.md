@@ -122,6 +122,12 @@ balances.
   with arguments `kind` = symbol `exit`, `amount` (int, msats), `destination` (bytes, the
   `exit_address` scriptPubKey) and, only when present, `expires_at_height` (int); for a cancel,
   `kind` = symbol `exit_cancel` and `exit_request_id` (bytes).
+- *Exit addresses.* `exit_address` (and a `DormancyAccept`'s, §8.3) MUST be a standard output
+  script: P2PKH (`76a914 <20> 88ac`), P2SH (`a914 <20> 87`), P2WPKH (`0014 <20>`), P2WSH
+  (`0020 <32>`) or P2TR (`5120 <32>`). Anything else would not relay, and one such output makes the
+  whole rotation unbroadcastable, so an `ExitRequest` naming another script is non-conforming. The
+  **dust floor** of an address is Bitcoin Core's dust threshold at the 3 sat/vB dust relay feerate:
+  P2PKH 546, P2SH 540, P2WPKH 294, P2WSH 330, P2TR 330 sats (vector `exit_address.txt`).
 - *Request.* Applying an `ExitRequest` requires `amount > 0` and `amount ≤` the deposit's available
   balance, moves `amount` into `locked_balance`, and records a pending request identified by SHA256 of the operation's TLV bytes
   (as signed, witness included; the depositor's nonce makes it unique), with its deposit, amount,
@@ -142,7 +148,9 @@ balances.
 - *Who pays.* Each exit pays only its own output's marginal cost,
   `exit_cost = feerate × (9 + len(exit_address))` sats, with `feerate` the rotation's (DEP-03); the
   vault pays the rest of the rotation. The output is `floor(amount / 1000) − exit_cost` sats and is
-  due only if that is at least 330.
+  due only if that is at least its address's dust floor.
+- *Relayability.* A member refuses to sign (`rotation_sign`) or cosign a rotating `QuorumBegin`
+  whose rotation has an output that is not a standard script at or above its dust floor.
 - *Settlement.* `exit_outputs` lists the due requests in that order, entry i with the request's
   deposit, amount and `vout` = i + 1, and the rotation transaction (DEP-03) pays output i + 1
   `floor(amount / 1000) − exit_cost` sats to its `exit_address`. Applying the `QuorumBegin` debits each entry's
@@ -327,7 +335,7 @@ operator MAY re-offer. No party is obliged to take a bucket.
   are in the bucket and not spun out (§8.2), each at its balance there, taken in ascending deposit
   id when the running total plus it plus `premium_msats` stays ≤ `accepted_total_msats` (the
   accept reserves the premium's credit too) and skipped otherwise; the rest stay. If the output
-  would be below 330 sats (the dust floor, as for exits) nothing migrates and the notice is
+  would be below the accept address's dust floor (as for exits) nothing migrates and the notice is
   consumed as usual. The rotation pays one
   output, after the spin-outs, to the accept's `exit_address`: `floor(Σ / 1000) + premium` sats.
   The `QuorumBegin` records `migration_manifest` (the migrated entries), `migration_receiver` and

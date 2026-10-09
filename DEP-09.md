@@ -33,6 +33,8 @@ The recipient (or anyone who can satisfy the completion_script) provides a `Tran
 
 **Enforcement.** Verifiers (cosigners and replayers) evaluate `script_witness` against the lock's `completion_script` through the dep-16 evaluator: the witness stack's entries are bound to the descriptor's obligations by content — 64-byte entries tried as ECDSA signatures over the dep-17 operation preimage, any-length entries tried as hash preimages (re-hashed against each `hashlock` target), 32-byte entries tried as scalars (curve-checked against each `pointlock` target). A `TransferComplete` whose witness fails evaluation is non-conforming; cosigners refuse it and replayers flag it. This is a hard validity rule — a release with a wrong preimage or scalar cannot commit.
 
+A `TransferComplete` naming no pending transfer is likewise non-conforming (a second completion of the same transfer included). No depositor signs these settlements, so these rules are what stops the operator deciding them alone: every member and replica checks them.
+
 On success: `amount` is credited to the destination deposit, `fee` is credited to the operator, and the transfer is removed from pending.
 
 ### Phase 2b: Fail (disc 72)
@@ -42,6 +44,8 @@ If the timeout is reached without completion, the operator appends `TransferFail
 - **transfer_id**: matches the lock
 - **block_hash**: the block hash at timeout height
 - **reason**: failure reason (1 = timeout, 0 = reserved)
+
+A `TransferFail` is conforming only for a pending transfer and only in an update whose `block_height` is at or past the lock's `timeout_height`: failing a transfer earlier would let the operator refund the source while the destination holds a valid completion. Members and replicas check it.
 
 On failure: the lock on the source (`amount + fee`) is released; the source recovers `amount + proportional_portion_of_fee`, and the **fixed** portion of the fee (`fixed_msats` from the source's `TransferFeeSchedule`) is charged to the source's balance and credited to the operator. The transfer is removed from pending. See DEP-07 §"Fee on Failure" for the full model.
 
