@@ -306,10 +306,23 @@ operator MAY re-offer. No party is obliged to take a bucket.
   against the receiver's capacity.
 - *Notice.* The source's `DormancyNotice` names `migration_receiver`, `manifest_hash`, and carries
   the offered `migration_manifest` (316, hashing to `manifest_hash`), `dormancy_accept` (338), the
-  receiver's signed `DormancyAccept` update, and `premium_msats` (340, whole satoshis, optional). Source cosigners verify it
-  without fetching the receiver's ledger: it decodes, its operator signature is by
-  `migration_receiver`, it names this `manifest_hash`, and its `expires_at_height` is after the
-  notice's `rotation_height`.
+  receiver's signed `DormancyAccept` update, `receiver_quorum_begin` (342), the receiver's signed
+  `QuorumBegin` governing the accept, and `premium_msats` (340, whole satoshis, optional). The
+  accept must be an update of an existing, quorum-backed receiver ledger, not a key's say-so:
+  - *Fold (self-contained).* The accept decodes, its operator signature is by
+    `migration_receiver`, it names this `manifest_hash`, and its `expires_at_height` is after the
+    notice's `rotation_height`. `receiver_quorum_begin` is a `QuorumBegin` signed by
+    `migration_receiver` on the accept's ledger at a lower sequence, itself cosigned by a strict
+    majority (`⌊n/2⌋ + 1`) of its `quorum_members`; the accept carries valid cosignatures from a
+    strict majority of those same members. `exit_address` is the receiver operator's own DEP-10
+    offer-type address for this manifest: the P2WPKH of `migration_receiver`, or the P2TR with
+    its x-only key internal and merkle root `SHA256(manifest_hash)` (BIP-341 tweak; spent by key
+    path).
+  - *Source cosigners (network).* Before cosigning the notice they fetch the receiver's ledger and
+    require: the accept at its sequence in the receiver's canonical history; the carried
+    `QuorumBegin` the latest in that history (the receiver's quorum is current); and its vault
+    outpoint (`new_outpoint_txid`:`new_outpoint_vout`) unspent on chain holding
+    `(amount + collateral_amount) / 1000` sats. A notice failing any check is refused.
 - *Migration.* At the consuming `QuorumBegin` the migrated deposits are those in the manifest that
   are in the bucket and not spun out (§8.2), each at its balance there, taken in ascending deposit
   id when the running total plus it plus `premium_msats` stays ≤ `accepted_total_msats` (the
