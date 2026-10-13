@@ -164,6 +164,12 @@ without having disputed. The proof carries the original proof, the disclosure, t
 the prover supplies. A member that stops cosigning a defrauded ledger altogether cannot be
 proven derelict this way, but it is then also not extending the fraud.
 
+**Scope.** A derelict member is slashed on every ledger it operates, as contagion slashes a
+signer (§5): one proof per ledger, each presented on and verified by that ledger's own quorum,
+which confiscates that vault. Dereliction is the same breach of duty wherever the member's
+collateral sits, and the deterrent the protocol relies on (an exposed key loses every vault it
+runs) is the same.
+
 ### 7. Post-expiry edges
 
 - **Degraded rebuild.** A `QuorumBegin` at Tier 1 or Tier 2 MUST stage only pubkeys
@@ -264,9 +270,10 @@ active vault (from their latest `QuorumBegin`) is at least `member_vault_ratio`
 Three signers of a theft of `V` then hold at least `1.5 V` between them on ledgers
 that can slash them; no separate bond is required.
 
-This is bite per theft, not per membership. A key is slashed once however many
-quorums it serves, so a member guarding `m` ledgers offers each roughly `1/m` of
-the bite it appears to. Full teeth require the sum of half-vaults a key guards to
+This is bite per theft, not per membership. However many quorums a key serves, it
+has only its own vaults to lose — slashing (by a theft proof or dereliction, §5–6) takes
+every ledger it operates once, not once per quorum it guards — so a member guarding `m`
+ledgers offers each roughly `1/m` of the bite it appears to. Full teeth require the sum of half-vaults a key guards to
 fit within its own vault; the protocol does not enforce that (it is the
 membership-bond capital problem in another form), so operators and wallets SHOULD
 weight a member's vault by the number of quorums it serves. The structure this
