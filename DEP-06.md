@@ -40,6 +40,7 @@ The list above is descriptive; `proof_type_byte` is the wire discriminant:
 | 3 | `StaleCosignature` (list 3) | | 8 | `Equivocation` |
 | 4 | `DisputeDereliction` (list 4) | | 9 | `NonConformingCosignature` |
 | 5 | `NonConformingUpdate` (list 5) | | 10 | `UnauthorizedVaultSpend` (list 7) |
+| | | | 11 | `UnhonouredObligation` (§Confiscation obligations) |
 
 For `DisputeDereliction` (DEP-19 §6), `accused_pubkey` is the derelict member, `ledger_id` the
 ledger it is slashed on (one it operates), and
@@ -341,6 +342,50 @@ re-arm round (Phase 4). The share slices follow it: sweepers MUST pay them into 
 lottery output, never to the accused operator. Until that round exists the slices stay unswept.
 
 Honest-sweeper enforcement: a sweep TX whose outputs deviate from this pro-rata-to-revealers contract is publicly observable. Sweepers who construct a deviating TX are themselves cosigners of the same ledger, and the deviation is a form of provable misbehavior. A `MaliciousSweep` fraud-proof type may be added later; for now the contract is enforced by recovery-quorum honesty and the social/reputational cost of public deviation. This is no stronger an honesty assumption than the recovery-quorum already requires for the lottery's own recovery long-tail.
+
+### Confiscation obligations (DEP-20 §8.3)
+
+A confiscated receiver may owe migrated deposits it never credited. They are settled from the
+vault, not left to the winner's goodwill.
+
+- **Recording.** Before arming, a disputing member MAY append `ObligationRecord` (op 106) to its
+  fork: `source_notice_update` (346) and `source_qb_update` (348), a source's signed
+  `DormancyNotice` carrying an accept of the disputed ledger and the source `QuorumBegin` that
+  consumed it (`consumed_notice`). The fork's fold requires both operator-signed by one operator on
+  one ledger, the `QuorumBegin` later and naming the notice, the accept on this ledger, and
+  `migration_receiver` this ledger's operator.
+- **Dangling set.** Over the participants of the eligibility cut, the distinct source
+  `QuorumBegin`s (by `new_outpoint_txid`, `migration_vout`) recorded on their forks below their
+  `DisputeArmed`, migrating a non-empty set to the ledger, at a block height below the accept's
+  `expires_at_height` (the accept in the ledger's history up to the fork point, by
+  `manifest_hash`), whose rotation output is confirmed by the snapshot E and unspent through E, and
+  which the ledger's history up to the fork point does not resolve with a `MigrationCredit`. Every
+  entry of each is owed.
+- **Swept inputs.** The confiscation spends, after the vault and in ascending (txid, vout), the
+  migration outputs of the dangling set and any outpoint a `MigrationCredit` recorded and no
+  `QuorumBegin` spliced (up to the fork point). They pay the vault's own script (the receiver may
+  not rotate while an accept is outstanding), so they are spent through the confiscation's tier.
+- **Splice-outs.** After the lottery output (and the respectful change), ascending by deposit id,
+  each owed entry whose descriptor is `pk(K)` and whose `floor(amount_msats / 1000) − feerate ×
+  (9 + 34)` is at least 330 is paid that to the key-path P2TR of K (as a dormancy spin-out). Every
+  other owed entry is **residue**.
+- **Residue.** `DisputeAcquire` records `confiscation_txid` (352). The new operator credits each
+  residue entry with `MigrationCredit` carrying `confiscation_tx` (350): after a custody change the
+  fold credits only the migrated entries no output of that transaction paid (by script and value).
+  Its deadline is the ledger's governing `service_response_blocks` from the `DisputeAcquire`'s
+  block height.
+- **`UnhonouredObligation` (11).** Against the new operator, on its ledger:
+
+      evidence_bytes = ascii_hex(source_notice_update) || ascii_hex(source_qb_update) || ascii_hex(acquire_update) || ascii_hex(confiscation_tx) || ascii_hex(proof_update)
+
+  A verifier requires: `acquire_update` in the accused's history, a `DisputeAcquire` naming the
+  accused as `new_custodian` and `confiscation_txid` the txid of `confiscation_tx`, whose input 0
+  spends the ledger's vault; the source evidence valid as for `MigrationCredit`, migrating to the
+  ledger's operator before the acquire, unresolved by a `MigrationCredit` before it; at least one
+  residue entry (unpaid by `confiscation_tx`); `proof_update` the accused's, in its history, its
+  block at least the governing `service_response_blocks` after the acquire's; and no
+  `MigrationCredit` carrying `confiscation_tx` for that migration at or before `proof_update`. It
+  is self-evident and needs no embedding.
 
 ### Race: Re-establishment vs Confiscation
 

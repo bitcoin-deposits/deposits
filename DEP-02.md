@@ -199,6 +199,7 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 103 | DormancyAccept | Settlement (DEP-20) |
 | 104 | LedgerWindDown | Settlement (DEP-20) |
 | 105 | MigrationCredit | Settlement (DEP-20 §8.3) |
+| 106 | ObligationRecord | Dispute (DEP-06 §Confiscation obligations) |
 
 ### Operation TLV Fields
 
@@ -257,8 +258,11 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 340 | premium_msats | 8 | DormancyNotice (DEP-20 §8.3; a multiple of 1000) |
 | 342 | receiver_quorum_begin | variable | DormancyNotice (DEP-20 §8.3; the receiver's signed governing QuorumBegin update) |
 | 344 | consumed_notice | 32 | QuorumBegin (DEP-20 §8.3; SHA256 of the consumed DormancyNotice's operation encoding) |
-| 346 | source_notice_update | variable | MigrationCredit (DEP-20 §8.3) |
-| 348 | source_qb_update | variable | MigrationCredit (DEP-20 §8.3) |
+| 346 | source_notice_update | variable | MigrationCredit (DEP-20 §8.3), ObligationRecord (DEP-06) |
+| 348 | source_qb_update | variable | MigrationCredit (DEP-20 §8.3), ObligationRecord (DEP-06) |
+| 350 | confiscation_tx | variable | MigrationCredit (after a custody change: the confiscation, DEP-06) |
+| 352 | confiscation_txid | 32 | DisputeAcquire (optional; the confiscation the custody change follows) |
+| 354 | source_ledger_id | 32 | DormancyAccept (optional; the source ledger, so members can find its notice) |
 | 310 | offer_event_id | 32 | DormancyAccept (Kind 9110 event id) |
 | 312 | accepted_total_msats | 8 | DormancyAccept |
 | 300 | exit_address | variable | DormancyAccept (the receiver's funding scriptPubKey) |

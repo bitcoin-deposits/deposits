@@ -306,7 +306,8 @@ operator MAY re-offer. No party is obliged to take a bucket.
 - *Accept.* The receiver appends `DormancyAccept` (op 103) to its own ledger: `offer_event_id`,
   `manifest_hash`, `accepted_total_msats`, `exit_address` (the scriptPubKey the migration output
   pays: the receiver's current vault script, so the coins sit under its quorum's tiers until
-  spliced and a confiscation sweeps them), `expires_at_height`, and
+  spliced and a confiscation sweeps them), `expires_at_height`, `source_ledger_id` (354, so its
+  members can find the source's notice for a dispute's `ObligationRecord`), and
   optionally `deposit_id`, its own deposit credited the premium. Its cosigners, given the manifest
   in the cosign request, MUST check its hash; that obligations + the totals of its unexpired
   uncredited accepts + `accepted_total_msats` ≤ reserves; that its quorum's fee floors (DEP-05)

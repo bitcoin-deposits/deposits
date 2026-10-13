@@ -375,7 +375,7 @@ claiming, is caught at claim time as a `WinnerCollateralDeviation` (below and DE
 Cosigners rebuild the confiscation transaction from public state and sign only an identical one,
 so its fee is a rule, not a proposer's choice:
 
-    confiscation_fee = feerate × (120 + 30 × voters)   sats
+    confiscation_fee = feerate × (120 + 30 × voters + Σ_swept (41 + 30 × voters))   sats
 
 where `voters` is the number of keys in the vault (the quorum members and the operator) and
 `feerate` is `reference_feerate_sat_vb` from the governing `QuorumBegin` (DEP-20 §8), or 2 sat/vB
@@ -384,8 +384,13 @@ input, at most two outputs, a witness of at most one signature per voter plus th
 control block). Every output value then follows: the punitive shape pays `vault − fee` to the
 lottery output; the respectful shape pays `max(obligations, 330)` to it and `vault − that − fee`
 to the operator's P2WPKH, or collapses to the punitive shape if that change is below 294 sats.
-The transaction is version 2, one input at the tier's nSequence `0xfffffffd`, nLockTime the tier's
-CLTV. Cosigners MUST refuse a proposal that differs in any byte from the one they build.
+The transaction is version 2, nLockTime the tier's CLTV; input 0 the vault and inputs 1.. the
+swept migration outputs (DEP-06 §Confiscation obligations), each at nSequence `0xfffffffd` and
+each spent through the same tier (a signer returns one signature per input). Output 0 is the
+lottery output, then the operator's change (respectful), then the obligation splice-outs. With
+obligations the lottery value is: punitive, `inputs − fee − Σ splice-outs`; respectful,
+`max(obligations + residue, 330)` (the ledger's obligations plus the owed entries not spliced out).
+Cosigners MUST refuse a proposal that differs in any byte from the one they build.
 
 The lottery claim's fee is `claim_fee_floor` (above), so a participant's declared replacement
 collateral always covers it. Its shape is fixed too: version 2, nLockTime 0; input 0 the lottery
