@@ -90,9 +90,9 @@ ledger, the notice first; the accept the accused's on `ledger_id`, over the noti
 `migration_receiver` the accused and its migrated entries all in the manifest;
 `confirmed_at_block_hash` on its chain; `proof_update` signed by the accused on `ledger_id`,
 present in its history, its block on the verifier's chain at its signed height, at least the
-deadline after the confirming block; and some migrated entry without an `OnchainCredit` of its
-deposit and exact amount naming (`new_outpoint_txid`, `migration_vout`) at or before
-`proof_update`'s sequence. It is self-evident and needs no embedding: every element is a signed
+deadline after the confirming block; and no `MigrationCredit` (DEP-20 §8.3) at or before
+`proof_update`'s sequence whose source `QuorumBegin` names the same rotation
+(`new_outpoint_txid`) and `migration_vout`. It is self-evident and needs no embedding: every element is a signed
 update or a block on the verifier's chain. Any node holding the source ledger may produce it; a
 receiver whose next rotating `QuorumBegin` omits the splice is instead caught by
 `NonConformingUpdate`.

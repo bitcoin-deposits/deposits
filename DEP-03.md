@@ -109,8 +109,13 @@ sign, and sign only an identical one, so its shape and fee are rules:
   (DEP-20 §3); then, with a migration (DEP-20 §8.3), one output of the manifest's total to the
   receiver's funding address. No other outputs (no anchor, see below).
 
-    rotation_vsize = 46 + 30 × voters + Σ_outputs (9 + len(script_pubkey)) + 68 × [splice-in]
+    rotation_vsize = 46 + 30 × voters + Σ_outputs (9 + len(script_pubkey)) + splice_vsize
     rotation_fee   = feerate × rotation_vsize   sats
+
+`splice_vsize` is 0 without a splice-in, 68 for a key-path or P2WPKH splice-in, and
+`41 + 30 × voters` for a splice-in at the vault's own script (a DEP-20 §8.3 migration output),
+which is spent through the same tier and leaf as input 0: each signing member returns a signature
+for each such input (`rotation_sign`: `signature` for input 0, `splice_signature` for input 1).
 
 where `voters` counts the keys of the vault being spent (members and operator), the sum runs over
 every output including the new vault (each exit output already bears its own share, DEP-20 §3), and `feerate` is `reference_feerate_sat_vb` from the
@@ -118,7 +123,8 @@ every output including the new vault (each exit output already bears its own sha
 confiscation fee). The new vault is valued `old vault + splice_in − Σ exit and migration outputs −
 rotation_fee`; a rotation leaving it below 330 sats is invalid. Cosigners MUST refuse a proposal
 that differs in any byte from the one they build. Implementations agree byte for byte on the shared
-vector `rotation_tx.txt` (plain, with exits, with splice-in, with migration).
+vector `rotation_tx.txt` (plain, with exits, with splice-in, with a vault-script splice-in, with
+migration).
 
 ### Reference feerate
 

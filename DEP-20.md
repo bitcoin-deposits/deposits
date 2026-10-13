@@ -305,13 +305,16 @@ operator MAY re-offer. No party is obliged to take a bucket.
   descriptor; `manifest_hash` is SHA256 of the manifest encoded as `migration_manifest` (type 316).
 - *Accept.* The receiver appends `DormancyAccept` (op 103) to its own ledger: `offer_event_id`,
   `manifest_hash`, `accepted_total_msats`, `exit_address` (the scriptPubKey the migration output
-  pays, of the same type as the receiver's DEP-10 funding offers), `expires_at_height`, and
+  pays: the receiver's current vault script, so the coins sit under its quorum's tiers until
+  spliced and a confiscation sweeps them), `expires_at_height`, and
   optionally `deposit_id`, its own deposit credited the premium. Its cosigners, given the manifest
   in the cosign request, MUST check its hash; that obligations + the totals of its unexpired
   uncredited accepts + `accepted_total_msats` ≤ reserves; that its quorum's fee floors (DEP-05)
   are ≤ every manifest deposit's schedule; and that it has no other accept outstanding (one
-  migration at a time). Until credited or past `expires_at_height`, an accepted total counts
-  against the receiver's capacity.
+  migration at a time). Until resolved or past `expires_at_height`, an accepted total counts
+  against the receiver's capacity. While an accept is outstanding — not resolved and the block
+  height below `expires_at_height + 6` — the receiver MUST NOT rotate: a rotating `QuorumBegin` is
+  refused, so the vault script the accept names is still the vault's when the migration lands.
 - *Notice.* The source's `DormancyNotice` names `migration_receiver`, `manifest_hash`, and carries
   the offered `migration_manifest` (316, hashing to `manifest_hash`), `dormancy_accept` (338), the
   receiver's signed `DormancyAccept` update, `receiver_quorum_begin` (342), the receiver's signed
@@ -322,10 +325,8 @@ operator MAY re-offer. No party is obliged to take a bucket.
     notice's `rotation_height`. `receiver_quorum_begin` is a `QuorumBegin` signed by
     `migration_receiver` on the accept's ledger at a lower sequence, itself cosigned by a strict
     majority (`⌊n/2⌋ + 1`) of its `quorum_members`; the accept carries valid cosignatures from a
-    strict majority of those same members. `exit_address` is the receiver operator's own DEP-10
-    offer-type address for this manifest: the P2WPKH of `migration_receiver`, or the P2TR with
-    its x-only key internal and merkle root `SHA256(manifest_hash)` (BIP-341 tweak; spent by key
-    path).
+    strict majority of those same members. `exit_address` is the scriptPubKey of
+    `receiver_quorum_begin`'s `reserves_id` address: the receiver's current vault.
   - *Source cosigners (network).* Before cosigning the notice they fetch the receiver's ledger and
     require: the accept at its sequence in the receiver's canonical history; the carried
     `QuorumBegin` the latest in that history (the receiver's quorum is current); and its vault
@@ -336,31 +337,39 @@ operator MAY re-offer. No party is obliged to take a bucket.
   id when the running total plus it plus `premium_msats` stays ≤ `accepted_total_msats` (the
   accept reserves the premium's credit too) and skipped otherwise; the rest stay. If the output
   would be below the accept address's dust floor (as for exits) nothing migrates and the notice is
-  consumed as usual. The rotation pays one
+  consumed as usual. Nothing migrates either when the consuming `QuorumBegin`'s block height is at
+  or past the accept's `expires_at_height`. A `QuorumBegin` that consumes a notice records
+  `consumed_notice` (344): `SHA256` of the notice's operation encoding, with or without a
+  migration, so one signed source update shows what became of an accept. The rotation pays one
   output, after the spin-outs, to the accept's `exit_address`: `floor(Σ / 1000) + premium` sats.
   The `QuorumBegin` records `migration_manifest` (the migrated entries), `migration_receiver` and
   `migration_vout`, and debits each migrated deposit to zero. The output's own cost
   (`feerate × (9 + len)`, a fee in `F_v`'s accounting like a spin-out's) and the premium (value
   paid out, not a fee) both come out of collateral: the §3 collateral is further reduced by
   `1000 × (cost + premium)`.
-- *Credit.* Once the output confirms, the receiver appends, for each manifest entry, a
-  `DepositOpen` with its descriptor and fee schedule if the deposit is new, then an `OnchainCredit`
-  of its exact amount naming the rotation txid and `migration_vout` (several credits name one
-  outpoint) with `funding_address` = `migration:` ‖ hex(`manifest_hash`), and the premium to the
-  accept's `deposit_id` the same way. Migration credits draw on the accept's reservation, not on
-  free capacity. The receiver absorbs the sub-satoshi
-  remainder of `floor(Σ / 1000)`.
+- *Credit (positive evidence).* The receiver resolves its accept with `MigrationCredit` (op 105):
+  `source_notice_update` (346) and `source_qb_update` (348), the source's signed notice and the
+  signed `QuorumBegin` that consumed it. The fold requires: the notice signed by its operator,
+  carrying an accept on this ledger for this accept's `manifest_hash`; the `QuorumBegin` by the
+  same operator on the same ledger at a higher sequence, its `consumed_notice` the notice's hash.
+  If it migrated — `migration_receiver` this ledger's operator, block height below
+  `expires_at_height` — the fold credits exactly its `migration_manifest`: each entry's deposit
+  opened with its descriptor and fee schedule if new, credited its exact amount, and the notice's
+  `premium_msats` credited to the accept's `deposit_id` (the receiver keeps it if none); the
+  outpoint (`new_outpoint_txid`, `migration_vout`) is recorded. If it did not, the accept is
+  resolved with nothing credited. The credits draw on the accept's reservation; the receiver
+  absorbs the sub-satoshi remainder of `floor(Σ / 1000)`. No other operation credits a migration.
 - *Splice.* The receiver MUST splice the migration output into its vault (§4) at its next rotating
-  `QuorumBegin`. Its ledger records the outpoint at the first migration credit; a rotating
-  `QuorumBegin` that does not splice it is `NonConforming` (DEP-19 §5): the obligation was
-  credited, and the coins backing it must join the vault. The splice closes the accept.
+  `QuorumBegin`; a rotating `QuorumBegin` that does not splice the recorded outpoint is
+  `NonConforming` (DEP-19 §5). The output sits at the vault's own script, so it is spent through
+  the same tier as the vault (DEP-03 `splice_vsize`). The splice closes the accept.
 - *Proof.* A receiver that has not credited every migrated entry within its own
   `service_response_blocks` (its governing terms at the accept, never a value a proof carries)
   after the migration output confirms is proved by `UncreditedOnchainPayment` with migration
   evidence (DEP-06): the source's `DormancyNotice` update (which carries the receiver's signed
   accept and the manifest), the source's `QuorumBegin` update (migrated entries, receiver, vout,
   rotation txid), the receiver's signed update past the deadline, and the confirming block; the
-  verifier checks the receiver's ledger for the credits.
+  verifier checks the receiver's ledger for a `MigrationCredit` resolving that `QuorumBegin`.
 
 **8.4 Who pays.** The initiator of an exit pays its output's marginal cost (§3
 *Who pays*): a depositor's `ExitRequest` bears its own `exit_cost`; dormancy and wind-down

@@ -198,6 +198,7 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 102 | DormancyNotice | Settlement (DEP-20) |
 | 103 | DormancyAccept | Settlement (DEP-20) |
 | 104 | LedgerWindDown | Settlement (DEP-20) |
+| 105 | MigrationCredit | Settlement (DEP-20 §8.3) |
 
 ### Operation TLV Fields
 
@@ -255,6 +256,9 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 316 | migration_manifest | variable | DormancyNotice (the offered manifest; its SHA256 is `manifest_hash`) |
 | 340 | premium_msats | 8 | DormancyNotice (DEP-20 §8.3; a multiple of 1000) |
 | 342 | receiver_quorum_begin | variable | DormancyNotice (DEP-20 §8.3; the receiver's signed governing QuorumBegin update) |
+| 344 | consumed_notice | 32 | QuorumBegin (DEP-20 §8.3; SHA256 of the consumed DormancyNotice's operation encoding) |
+| 346 | source_notice_update | variable | MigrationCredit (DEP-20 §8.3) |
+| 348 | source_qb_update | variable | MigrationCredit (DEP-20 §8.3) |
 | 310 | offer_event_id | 32 | DormancyAccept (Kind 9110 event id) |
 | 312 | accepted_total_msats | 8 | DormancyAccept |
 | 300 | exit_address | variable | DormancyAccept (the receiver's funding scriptPubKey) |
