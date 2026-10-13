@@ -127,6 +127,17 @@ decides the lifecycle tier and so the cosignature threshold (DEP-05 §Lifecycle)
 the signature, anyone could move an honest update past `quorum_expiry`. The length prefix keeps
 the end of `message` from being read as the start of what follows it.
 
+Every rule that reads a height reads the update's signed `block_height`, never the judge's own
+tip: the lifecycle tier and threshold (DEP-05), exit settlement and its cutoff window (DEP-20
+§3), expiry releases, dormancy and migration deadlines, and each operation's `expiry` and nonce
+window. A cosigner checks a proposed update there, a replica folds it there, and a verifier
+judges a `NonConformingUpdate` there. The judge's tip enters only as a bound: a cosigner
+refuses a `block_height` more than 6 blocks from its own tip, or a `block_hash` not on its chain.
+A replica that folds at its own tip judges a different update from the one the quorum signed.
+Its tip may lag or lead the update, so it would accuse an honest quorum (a cutoff "outside the
+window", or an exit that has "expired") whose update every other replica accepts. Vector:
+`exit_settlement.txt` case `judge_height`.
+
 ### Co-signing
 
 Each quorum member independently signs the update content and their own ledger's tip:
