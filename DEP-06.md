@@ -80,7 +80,11 @@ For `UncreditedOnchainPayment` with offer evidence (JSON variant `UncreditedOnch
 
 `deposit_id` is the deposit the cosigned offer names (DEP-10 digest), so the proof names the
 payment's owner; the evidence also carries the deposit's `descriptor` (not hashed: verifiers check it
-hashes to `deposit_id`), which gives the owner's address.
+hashes to `deposit_id`), which gives the owner's address. The deadline is **never carried**: a
+verifier ignores the evidence's `required_confirmations` and requires the operator's update at
+`proof_sequence` to be at least the ledger's governing `service_response_blocks` (as for migration
+evidence: the largest a seated member of the `QuorumBegin` governing `proof_sequence` declared, 72
+if none) after the payment's confirming block.
 
 For `UncreditedOnchainPayment` with DEP-20 §8.3 migration evidence (JSON variant
 `UncreditedMigration`), `accused_pubkey` is the receiver, `ledger_id` its ledger, and
