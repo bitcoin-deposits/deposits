@@ -74,6 +74,14 @@ An update that names a block (a non-zero block hash) must have that block on the
 its signed height; an update with no block hash is dated by its signed height alone. The proof is
 self-evident and needs no embedding.
 
+For `UncreditedOnchainPayment` with offer evidence (JSON variant `UncreditedOnchain`):
+
+    evidence_bytes = ascii_hex(offer_id) || ascii_hex(deposit_id) || u32_le(deadline_block) || ascii_hex(txid) || u32_le(vout) || u64_le(amount_sats) || confirmed_at_block_hash
+
+`deposit_id` is the deposit the cosigned offer names (DEP-10 digest), so the proof names the
+payment's owner; the evidence also carries the deposit's `descriptor` (not hashed: verifiers check it
+hashes to `deposit_id`), which gives the owner's address.
+
 For `UncreditedOnchainPayment` with DEP-20 §8.3 migration evidence (JSON variant
 `UncreditedMigration`), `accused_pubkey` is the receiver, `ledger_id` its ledger, and
 
@@ -349,18 +357,26 @@ A confiscated receiver may owe migrated deposits it never credited. They are set
 vault, not left to the winner's goodwill.
 
 - **Recording.** Before arming, a disputing member MAY append `ObligationRecord` (op 106) to its
-  fork: `source_notice_update` (346) and `source_qb_update` (348), a source's signed
-  `DormancyNotice` carrying an accept of the disputed ledger and the source `QuorumBegin` that
-  consumed it (`consumed_notice`). The fork's fold requires both operator-signed by one operator on
-  one ledger, the `QuorumBegin` later and naming the notice, the accept on this ledger, and
-  `migration_receiver` this ledger's operator.
+  fork, in one of two forms. *Migration:* `source_notice_update` (346) and `source_qb_update`
+  (348), a source's signed `DormancyNotice` carrying an accept of the disputed ledger and the source
+  `QuorumBegin` that consumed it (`consumed_notice`); the fork's fold requires both operator-signed
+  by one operator on one ledger, the `QuorumBegin` later and naming the notice, the accept on this
+  ledger. *Payment:* `uncredited_proof` (356), an `UncreditedOnchainPayment` proof with offer
+  evidence (JSON, as broadcast) against this ledger; the fold requires its `descriptor` to hash to
+  its `deposit_id` and its offer cosignature valid by a member of the ledger's quorum (DEP-10
+  digest).
 - **Dangling set.** Over the participants of the eligibility cut, the distinct source
   `QuorumBegin`s (by `new_outpoint_txid`, `migration_vout`) recorded on their forks below their
   `DisputeArmed`, migrating a non-empty set to the ledger, at a block height below the accept's
   `expires_at_height` (the accept in the ledger's history up to the fork point, by
   `manifest_hash`), whose rotation output is confirmed by the snapshot E and unspent through E, and
   which the ledger's history up to the fork point does not resolve with a `MigrationCredit`. Every
-  entry of each is owed.
+  entry of each is owed. Likewise every distinct payment (`txid`, `vout`) of a recorded
+  `uncredited_proof` that verifies against the ledger's history (the payment confirmed, the
+  operator signed past the required confirmations without an `OnchainCredit` of it, none up to the
+  fork point either) is owed to its `deposit_id`: `amount_sats × 1000` msat under the evidence's
+  `descriptor`. A payment sits at the operator's offer address, not the vault, so
+  it is not swept: its splice-out is paid from the vault.
 - **Swept inputs.** The confiscation spends, after the vault and in ascending (txid, vout), the
   migration outputs of the dangling set and any outpoint a `MigrationCredit` recorded and no
   `QuorumBegin` spliced (up to the fork point). They pay the vault's own script (the receiver may
@@ -370,21 +386,28 @@ vault, not left to the winner's goodwill.
   (9 + 34)` is at least 330 is paid that to the key-path P2TR of K (as a dormancy spin-out). Every
   other owed entry is **residue**.
 - **Residue.** `DisputeAcquire` records `confiscation_txid` (352). The new operator credits each
-  residue entry with `MigrationCredit` carrying `confiscation_tx` (350): after a custody change the
-  fold credits only the migrated entries no output of that transaction paid (by script and value).
+  residue entry: a migration's with `MigrationCredit` carrying `confiscation_tx` (350) — after a
+  custody change the fold credits only the migrated entries no output of that transaction paid (by
+  script and value) — and a payment's with an ordinary `OnchainCredit` naming its `txid`, `vout`
+  (opening the deposit with its descriptor first if it is not open).
   Its deadline is the ledger's governing `service_response_blocks` from the `DisputeAcquire`'s
   block height.
 - **`UnhonouredObligation` (11).** Against the new operator, on its ledger:
 
-      evidence_bytes = ascii_hex(source_notice_update) || ascii_hex(source_qb_update) || ascii_hex(acquire_update) || ascii_hex(confiscation_tx) || ascii_hex(proof_update)
+      evidence_bytes = ascii_hex(source_notice_update) || ascii_hex(source_qb_update) || uncredited_proof || ascii_hex(acquire_update) || ascii_hex(confiscation_tx) || ascii_hex(proof_update)
+
+  with either the two source updates (a migration; `uncredited_proof` empty) or `uncredited_proof`
+  (a payment, its JSON text; the source updates empty).
 
   A verifier requires: `acquire_update` in the accused's history, a `DisputeAcquire` naming the
   accused as `new_custodian` and `confiscation_txid` the txid of `confiscation_tx`, whose input 0
   spends the ledger's vault; the source evidence valid as for `MigrationCredit`, migrating to the
-  ledger's operator before the acquire, unresolved by a `MigrationCredit` before it; at least one
-  residue entry (unpaid by `confiscation_tx`); `proof_update` the accused's, in its history, its
-  block at least the governing `service_response_blocks` after the acquire's; and no
-  `MigrationCredit` carrying `confiscation_tx` for that migration at or before `proof_update`. It
+  ledger's operator before the acquire, unresolved by a `MigrationCredit` before it — or the
+  `uncredited_proof` valid against the ledger's history before the acquire; at least one residue
+  entry (unpaid by `confiscation_tx`); `proof_update` the accused's, in its history, its block at
+  least the governing `service_response_blocks` after the acquire's; and no credit after the
+  acquire at or before `proof_update` (a `MigrationCredit` for that migration, or an `OnchainCredit`
+  naming the payment). It
   is self-evident and needs no embedding.
 
 ### Race: Re-establishment vs Confiscation

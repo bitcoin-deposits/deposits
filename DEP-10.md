@@ -11,13 +11,17 @@ This document specifies how deposits receive and send funds through on-chain tra
 An operator creates a funding offer for a deposit: a bitcoin address where funds can be sent, with a deadline block and amount range. After quorum establishment, offers are co-signed by a quorum member using BIP-340 tagged hashing:
 
     tag = SHA256("deposits/offer_cosign")
-    data = ledger_id || offer_id || operator_x_only || len(address) || address || deadline_block_le32
+    data = ledger_id || offer_id || deposit_id || operator_x_only || len(address) || address || deadline_block_le32
     digest = SHA256(tag || tag || data || member_ledger_hash)
 
-where `ledger_id` is the 64-character lowercase hex text (ASCII), `len(address)` one byte and
-`address` the address text (ASCII). The request is `cosign_offer` with `offer_id`, `operator_id`,
-`funding_address` and `deadline_block`; the member answers `signature_hex`, `cosigner_pubkey` and
-`member_ledger_hash_hex`.
+where `ledger_id` is the 64-character lowercase hex text (ASCII), `deposit_id` the 16 raw bytes of
+the deposit the offer funds (so the cosigned offer names its owner: a proven-uncredited payment is
+owed to that deposit, DEP-06 §Confiscation obligations), `len(address)` one byte and `address` the
+address text (ASCII). The request is `cosign_offer` with `offer_id`, `deposit_id` (hex),
+`operator_id`, `funding_address` and `deadline_block`; the member answers `signature_hex`,
+`cosigner_pubkey` and `member_ledger_hash_hex`. Since a `deposit_id` is the hash of its descriptor,
+uncredited-payment evidence carries the descriptor and verifiers check it hashes to the bound
+`deposit_id`.
 
 **Completion.** A wallet (or anyone) names the payment with `complete_offer` (`offer_id`, `txid`,
 `vout`). The operator MUST credit it if output `vout` of `txid` pays the offer's `funding_address`

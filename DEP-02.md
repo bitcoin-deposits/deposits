@@ -263,6 +263,7 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 350 | confiscation_tx | variable | MigrationCredit (after a custody change: the confiscation, DEP-06) |
 | 352 | confiscation_txid | 32 | DisputeAcquire (optional; the confiscation the custody change follows) |
 | 354 | source_ledger_id | 32 | DormancyAccept (optional; the source ledger, so members can find its notice) |
+| 356 | uncredited_proof | variable | ObligationRecord (DEP-06; the UncreditedOnchainPayment proof JSON, payment form) |
 | 310 | offer_event_id | 32 | DormancyAccept (Kind 9110 event id) |
 | 312 | accepted_total_msats | 8 | DormancyAccept |
 | 300 | exit_address | variable | DormancyAccept (the receiver's funding scriptPubKey) |
