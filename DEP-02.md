@@ -360,6 +360,9 @@ stay valid. See DEP-10 §"Operator-direct pay" for the settlement model.
 |---|---|---|---|
 | 100 | reason | variable | DisputeEnter |
 | 102 | last_valid_sequence | 8 | DisputeEnter |
+| 292 | anchor_block_hash | 32 | DisputeEnter (optional; `QuorumExpired` evidence) |
+| 294 | anchor_block_height | 4 | DisputeEnter (optional; with 292) |
+| 344 | fraud_proof_hash | 32 | DisputeEnter (optional; the DEP-06 proof hash the dispute acts on — DEP-19 §6 disclosure) |
 | 108 | new_custodian | 33 | DisputeAcquire |
 | 110 | claim_txid | 32 | DisputeAcquire |
 | 118 | armed_block | 4 | DisputeArmed |

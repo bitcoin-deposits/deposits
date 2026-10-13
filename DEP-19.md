@@ -154,6 +154,16 @@ This applies equally when the accused is the operator of the member's ledger and
 fault occurred elsewhere (`fault_ledger_id ≠ ledger_id`). Cross-ledger contagion is
 thereby a duty with the same dereliction proof as local evidence, not a permission.
 
+**Disclosure and proof.** A member that disputes on a proof cites it: its `DisputeEnter`
+carries the proof's hash (`fraud_proof_hash`, DEP-02). That signed update is the disclosure,
+and its block anchors the duty. A co-member is provably derelict only if it held a seat under
+the governing `QuorumBegin`, cosigned the defrauded ledger at or after the disclosure (so it had
+seen it), and then signed an update of its own at least its own `dispute_response_blocks` later
+without having disputed. The proof carries the original proof, the disclosure, the
+`QuorumBegin` and that cosigned update (DEP-06 `DisputeDereliction`); its window is never a value
+the prover supplies. A member that stops cosigning a defrauded ledger altogether cannot be
+proven derelict this way, but it is then also not extending the fraud.
+
 ### 7. Post-expiry edges
 
 - **Degraded rebuild.** A `QuorumBegin` at Tier 1 or Tier 2 MUST stage only pubkeys

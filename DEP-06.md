@@ -41,14 +41,37 @@ The list above is descriptive; `proof_type_byte` is the wire discriminant:
 | 4 | `DisputeDereliction` (list 4) | | 9 | `NonConformingCosignature` |
 | 5 | `NonConformingUpdate` (list 5) | | 10 | `UnauthorizedVaultSpend` (list 7) |
 
-For `DisputeDereliction`, `accused_pubkey` is the derelict member and
+For `DisputeDereliction` (DEP-19 §6), `accused_pubkey` is the derelict member, `ledger_id` the
+ledger it is slashed on (one it operates), and
 
-    evidence_bytes = ascii_hex(original_fraud_hash) || original_fraud_block_hash || ascii_hex(member_ledger_id) || ascii_hex(member_pubkey)
+    evidence_bytes = ascii_hex(original_fraud_hash) || ascii_hex(disclosure_update)
+                  || ascii_hex(quorum_begin_update) || ascii_hex(visibility_update)
+                  || ascii_hex(member_ledger_id) || ascii_hex(member_pubkey) || u64_le(member_active_sequence)
 
-where `original_fraud_block_hash` is the 32 raw bytes of the block anchoring the original proof's
-detection; in JSON it is serialised as lowercase hex, like every other hash. `required_response_blocks`
-and the member's active update are carried but not hashed. The proof is self-evident (the member's own
-signed update after the window is the evidence) and needs no embedding.
+where the three updates are signed updates in their DEP-02 encoding. The evidence also carries
+`original_proof`, the whole proof the member ignored; `original_fraud_hash` must be its proof hash, so
+the hash commits to it. A verifier requires:
+
+1. `original_proof` is punitive (not `QuorumExpired` or `DisputeDereliction`) and verifies against the
+   defrauded ledger D = `original_proof.ledger_id`, using the verifier's own copy of D (operator
+   chain). A verifier that holds none of D, or cannot verify that proof type, rejects.
+2. `disclosure_update` is a signed `DisputeEnter` on D whose `fraud_proof_hash` (DEP-02 TLV 344) is
+   `original_fraud_hash`. Its signed block is the anchor; it is not a free choice of the prover.
+3. `quorum_begin_update` is D's `QuorumBegin`, in D's chain, governing at the disclosure's
+   `last_valid_sequence`, and it seats both the discloser and the accused, who are different keys.
+4. `visibility_update` is an update of D at or after the anchor carrying a valid cosignature by the
+   accused: it had seen the ledger since the disclosure.
+5. `member_active_sequence` names an update the accused signed on `ledger_id` at least its own
+   `dispute_response_blocks` after `visibility_update`. The window is the accused's own, from its
+   latest `QuorumAddMember` on D at or before that `QuorumBegin` (DEP-11's default, 144, if absent).
+   No window value is carried, and any carried one is ignored.
+6. No `DisputeEnter` (other than for expiry) or `DisputeArmed` signed by the accused on D, at a block
+   no later than that deadline, is known to the verifier (on D or any fork of it). Such an update
+   rebuts the proof, whoever presents it.
+
+An update that names a block (a non-zero block hash) must have that block on the verifier's chain at
+its signed height; an update with no block hash is dated by its signed height alone. The proof is
+self-evident and needs no embedding.
 
 For `UncreditedOnchainPayment` with DEP-20 §8.3 migration evidence (JSON variant
 `UncreditedMigration`), `accused_pubkey` is the receiver, `ledger_id` its ledger, and
