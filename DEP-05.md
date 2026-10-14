@@ -188,6 +188,26 @@ Within the active period (`block_height < quorum_expiry`) every update requires 
 
 Past `quorum_expiry`, value-moving operations become uncosignable (no threshold authorizes them); only *establishment operations* (`QuorumAddMember`, `QuorumRemoveMember`, `QuorumBegin`) can still be cosigned, and their required threshold cascades through the tiers in §Lifecycle as time passes.
 
+### Cosign Rounds
+
+A cosignature signs `cosign_data || member_ledger_hash` (DEP-02 §Co-signing). It is bound to that
+update and to nothing about when it arrived. A cosignature that reaches the operator after it stopped
+waiting is still valid for that `cosign_data`.
+
+- **Keep late cosignatures.** An operator MUST NOT discard a cosignature only because it arrived late.
+  It keeps every cosignature that verifies over a `cosign_data` it requested, one per member. A retry
+  of the same update (identical `cosign_data`) starts from those, and asks the members only for the
+  rest. Once the operator signs a different update at that sequence, the kept cosignatures are dead
+  and it drops them. It never attaches them to other bytes.
+- **`cosign_response_seconds`** (advisory, default 30): the time a member has to answer a cosign
+  request, and so the least an operator waits before calling a round short. A member SHOULD answer
+  within it, and SHOULD answer cosign requests ahead of other relay traffic. Wall-clock time is not on
+  chain, so a late answer is not provable and is not a fault. The provable obligations stay
+  block-based (`service_response_blocks`, DEP-11).
+
+Without this rule a member that answers in 12 s, behind a burst of relay traffic, is never counted
+against a 10 s deadline. Each retry is a new request, which arrives as late as the one before it.
+
 ### Conformance
 
 Co-signing without state validation is non-conforming — a member who co-signs an update that violates obligation limits is complicit in the violation and may have their own collateral slashed on their own ledger(s).
