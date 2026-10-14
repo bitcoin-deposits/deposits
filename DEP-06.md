@@ -139,6 +139,13 @@ Each `CausalLink` is a co-signed update on ledger X whose `member_ledger_hash` c
 
 Direct embedding: empty chain. One hop: one link. Longer paths: multiple links.
 
+**JSON form.** A broadcast proof is the JSON object `{proof_type, accused, ledger_id, evidence:
+{<variant>: {...}}}`, where `<variant>` is the proof type's name. The one exception is an
+`UncreditedOnchainPayment` with migration evidence, whose variant is `UncreditedMigration`. Every
+byte-string field in the evidence (block hashes, txids) is lowercase hex. A reader also accepts
+the earlier array of byte values. A proof that does not parse is logged and dropped, never
+silently ignored. Vector: `proof_json.txt`.
+
 ## Verification
 
 A verifier always checks the proof's own evidence. For a proof that needs embedding (see Embedding), it also:
