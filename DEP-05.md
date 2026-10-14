@@ -197,8 +197,8 @@ waiting is still valid for that `cosign_data`.
 - **Keep late cosignatures.** An operator MUST NOT discard a cosignature only because it arrived late.
   It keeps every cosignature that verifies over a `cosign_data` it requested, one per member. A retry
   of the same update (identical `cosign_data`) starts from those, and asks the members only for the
-  rest. Once the operator signs a different update at that sequence, the kept cosignatures are dead
-  and it drops them. It never attaches them to other bytes.
+  rest. Once the operator signs a different update at that sequence, the kept cosignatures are dead.
+  It never attaches them to other bytes, and it may drop them.
 - **`cosign_response_seconds`** (advisory, default 30): the time a member has to answer a cosign
   request, and so the least an operator waits before calling a round short. A member SHOULD answer
   within it, and SHOULD answer cosign requests ahead of other relay traffic. Wall-clock time is not on
