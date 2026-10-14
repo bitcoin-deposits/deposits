@@ -14,7 +14,7 @@ This document specifies fraud proof construction, embedding, broadcast, and veri
 
 4. **Inactive quorum member**: a member was active (their ledger has updates after the fraud) but did not initiate a dispute within the required block window.
 
-5. **Non-conforming update**: the operator signed a ledger update that violates protocol rules (e.g., spending more than balance, invalid fee collection).
+5. **Non-conforming update**: the operator signed a ledger update that violates protocol rules (e.g., spending more than balance, invalid fee collection), including the header rules of DEP-02 §Block height and hash: a `block_height` below its predecessor's, or no `block_hash` (a hash not on the verifier's chain is never a fault).
 
    An operator-signed update that extends nothing in the ledger's history (its `previous_hash` links to no update) is not itself fraud, even though v2 signatures make it attributable: it is provable only as `Equivocation` (it conflicts with another update at its sequence) or as a non-conforming update (if it is cosigned).
 
@@ -70,8 +70,8 @@ the hash commits to it. A verifier requires:
    no later than that deadline, is known to the verifier (on D or any fork of it). Such an update
    rebuts the proof, whoever presents it.
 
-An update that names a block (a non-zero block hash) must have that block on the verifier's chain at
-its signed height; an update with no block hash is dated by its signed height alone. The proof is
+Every update is dated by its signed `block_height` alone; its `block_hash` is never resolved
+(DEP-02 §Block height and hash). The proof is
 self-evident and needs no embedding.
 
 For `UncreditedOnchainPayment` with offer evidence (JSON variant `UncreditedOnchain`):
@@ -82,7 +82,7 @@ For `UncreditedOnchainPayment` with offer evidence (JSON variant `UncreditedOnch
 payment's owner; the evidence also carries the deposit's `descriptor` (not hashed: verifiers check it
 hashes to `deposit_id`), which gives the owner's address. The deadline is **never carried**: a
 verifier ignores the evidence's `required_confirmations` and requires the operator's update at
-`proof_sequence` to be at least the ledger's governing `service_response_blocks` (as for migration
+`proof_sequence` to be signed at a `block_height` at least the ledger's governing `service_response_blocks` (as for migration
 evidence: the largest a seated member of the `QuorumBegin` governing `proof_sequence` declared, 72
 if none) after the payment's confirming block.
 
@@ -102,8 +102,8 @@ ledger, the notice first; the accept the accused's on `ledger_id`, over the noti
 `manifest_hash`, and unexpired at the `QuorumBegin`'s block height; the `QuorumBegin`'s
 `migration_receiver` the accused and its migrated entries all in the manifest;
 `confirmed_at_block_hash` on its chain; `proof_update` signed by the accused on `ledger_id`,
-present in its history, its block on the verifier's chain at its signed height, at least the
-deadline after the confirming block; and no `MigrationCredit` (DEP-20 §8.3) at or before
+present in its history, its signed `block_height` at least the deadline after the confirming
+block's height; and no `MigrationCredit` (DEP-20 §8.3) at or before
 `proof_update`'s sequence whose source `QuorumBegin` names the same rotation
 (`new_outpoint_txid`) and `migration_vout`. It is self-evident and needs no embedding: every element is a signed
 update or a block on the verifier's chain. Any node holding the source ledger may produce it; a
@@ -114,7 +114,7 @@ For `UnauthorizedVaultSpend`, `accused_pubkey` is one witness signer, `ledger_id
 
     evidence_bytes = ascii_hex(spent_ledger_id) || u64_le(governing_quorumbegin_seq) || ascii_hex(spend_tx) || spend_block_hash
 
-where `spend_block_hash` is the 32 raw bytes of the confirming block. The proof also carries each spent input's prevout (`sats:script_pubkey_hex`, needed for the BIP-341 sighash); these are not hashed, since the transaction commits to them. A verifier rebuilds the reserves from the spent ledger's operator and the `QuorumBegin` at `governing_quorumbegin_seq`, finds the input spending its vault outpoint, matches the witness leaf and control block to a tier, verifies the witness signatures to that tier's threshold, and requires the accused among the signers and the block on its chain. A spend whose txid is a recorded `QuorumBegin`'s `new_outpoint_txid` is authorised at once (rotations are recorded before they are broadcast, DEP-03 §Rotation ordering); any other spend is judged only once it is 3 blocks deep, a backstop for a watcher that has not yet received the `QuorumBegin`. A watcher keeps the previous vault watched too until its rotation confirms (a `QuorumBegin` is recorded before its rotation is broadcast, so the old vault is spent after the ledger already names the new one), and treats each theft as owed until its proofs are published to every ledger its signers operate: a relay error, a restart or a later advertisement must not silence it. A confiscation is excused only when the verifier knows it: one it built, cosigned, or saw confirmed as a dispute's confiscation (its own dispute record); a verifier that missed the dispute may wrongly accuse its signers. The proof is self-evident and needs no embedding.
+where `spend_block_hash` is the 32 raw bytes of the confirming block. The proof also carries each spent input's prevout (`sats:script_pubkey_hex`, needed for the BIP-341 sighash); these are not hashed, since the transaction commits to them. A verifier rebuilds the reserves from the spent ledger's operator and the `QuorumBegin` at `governing_quorumbegin_seq`, finds the input spending its vault outpoint, matches the witness leaf and control block to a tier, verifies the witness signatures to that tier's threshold, and requires the accused among the signers and the block on its chain. The block is a confirmation, not a date: a verifier that cannot find it (reorganised out, or not yet seen) neither accepts the proof nor holds anything against anyone, and a watcher whose spend's block is reorganised out re-checks the spend and proves it again from the block that confirms it. A spend whose txid is a recorded `QuorumBegin`'s `new_outpoint_txid` is authorised at once (rotations are recorded before they are broadcast, DEP-03 §Rotation ordering); any other spend is judged only once it is 3 blocks deep, a backstop for a watcher that has not yet received the `QuorumBegin`. A watcher keeps the previous vault watched too until its rotation confirms (a `QuorumBegin` is recorded before its rotation is broadcast, so the old vault is spent after the ledger already names the new one), and treats each theft as owed until its proofs are published to every ledger its signers operate: a relay error, a restart or a later advertisement must not silence it. A confiscation is excused only when the verifier knows it: one it built, cosigned, or saw confirmed as a dispute's confiscation (its own dispute record); a verifier that missed the dispute may wrongly accuse its signers. The proof is self-evident and needs no embedding.
 
 ## Embedding
 
@@ -409,8 +409,8 @@ vault, not left to the winner's goodwill.
   spends the ledger's vault; the source evidence valid as for `MigrationCredit`, migrating to the
   ledger's operator before the acquire, unresolved by a `MigrationCredit` before it — or the
   `uncredited_proof` valid against the ledger's history before the acquire; at least one residue
-  entry (unpaid by `confiscation_tx`); `proof_update` the accused's, in its history, its block at
-  least the governing `service_response_blocks` after the acquire's; and no credit after the
+  entry (unpaid by `confiscation_tx`); `proof_update` the accused's, in its history, its signed
+  `block_height` at least the governing `service_response_blocks` after the acquire's; and no credit after the
   acquire at or before `proof_update` (a `MigrationCredit` for that migration, or an `OnchainCredit`
   naming the payment). It
   is self-evident and needs no embedding.

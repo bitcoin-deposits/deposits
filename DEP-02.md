@@ -56,6 +56,25 @@ signed and hashed as zero; encoders MUST omit a zero value and decoders MUST rej
 zero, so that every update has exactly one encoding. Types 14, 16 and 18 (the pre-majority
 single-cosignature format) are retired; decoders MUST reject them.
 
+### Block height and hash
+
+An update is dated by its signed `block_height` alone. Along a ledger's chain heights are
+non-decreasing: an update whose `block_height` is below its predecessor's is a
+`NonConformingUpdate` (DEP-06); an equal height is fine, since many updates share a block. Every
+update carries a `block_hash`, 32 bytes and not all zero, naming the block its operator saw at
+that height; an update without one is a `NonConformingUpdate` too. The hash is **never judged
+against any node's chain**: a block reorganised out is not a fault, no conformance rule reads it,
+and no deadline or proof resolves it to a height. Every deadline and every proof that dates an
+update (DEP-06) reads its signed `block_height`.
+
+An operator never signs a `block_height` above the best tip it has seen. After a reorganisation
+lowers its tip below its last update's height, it keeps signing at that height (and that update's
+hash) until its tip passes it.
+
+Without the first rule an operator could date an update in the past (a lower height) to dodge a
+deadline; without the second it could omit the hash, which a verifier once needed to date the
+update. Vector: `header_conformance.txt`.
+
 ### Cosignatures (Tag 22)
 
 Tag 22 contains one or more cosignature entries concatenated as length-prefixed records. Each entry is:
@@ -132,7 +151,9 @@ tip: the lifecycle tier and threshold (DEP-05), exit settlement and its cutoff w
 §3), expiry releases, dormancy and migration deadlines, and each operation's `expiry` and nonce
 window. A cosigner checks a proposed update there, a replica folds it there, and a verifier
 judges a `NonConformingUpdate` there. The judge's tip enters only as a bound: a cosigner
-refuses a `block_height` more than 6 blocks from its own tip, or a `block_hash` not on its chain.
+refuses a `block_height` more than 6 blocks below its own tip, below the ledger's latest, or more
+than 6 above its tip; one up to 6 above its tip it waits for (its own view catching up) rather
+than refusing. It never checks the `block_hash` against its chain (§Block height and hash).
 A replica that folds at its own tip judges a different update from the one the quorum signed.
 Its tip may lag or lead the update, so it would accuse an honest quorum (a cutoff "outside the
 window", or an exit that has "expired") whose update every other replica accepts. Vector:
