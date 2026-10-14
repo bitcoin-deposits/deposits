@@ -367,8 +367,9 @@ vault, not left to the winner's goodwill.
   by one operator on one ledger, the `QuorumBegin` later and naming the notice, the accept on this
   ledger. *Payment:* `uncredited_proof` (356), an `UncreditedOnchainPayment` proof with offer
   evidence (JSON, as broadcast) against this ledger; the fold requires its `descriptor` to hash to
-  its `deposit_id` and its offer cosignature valid by a member of the ledger's quorum (DEP-10
-  digest).
+  its `deposit_id` and its offer cosignature valid by a member of the ledger's quorum at the fork
+  point (DEP-10 digest): the quorum the `DisputeEnter` forked from, whatever a fork's own state
+  keeps of it.
 - **Dangling set.** Over the participants of the eligibility cut, the distinct source
   `QuorumBegin`s (by `new_outpoint_txid`, `migration_vout`) recorded on their forks below their
   `DisputeArmed`, migrating a non-empty set to the ledger, at a block height below the accept's
