@@ -353,6 +353,16 @@ the relay delivers the remaining arms. The set is **final once a confiscation co
 exactly the set whose lottery output the confiscation pays, and arms seen afterwards do not change
 it. Every later step (reveal, claim, attestation, armer shares, sweeps) uses that set, recovered
 from the confirmed output (members try their current cut first, then the subsets of all armers).
+Concretely, once the confiscation confirms in block C:
+
+- An arm whose signed header is above C does not count, for E or for the set. Each armer's latest
+  arm at or below C is its arm.
+- A member neither enters nor arms a dispute whose vault is already spent on the confirmed chain. A
+  restart, or a fork DisputeEnter replayed by the relay, does not reopen it.
+- A member looking for the landed confiscation starts its search at the dispute's first arm, not at
+  E. Arms published after C would otherwise lift the search past the confiscation it is looking for.
+
+Vector: `armer_eligibility.json`, the case with a `confiscation_height`.
 
 **One participant** takes custody without a draw: the lottery's primary leaf is
 `<participant_xonly> OP_CHECKSIG` (no preimage is revealed; the recovery leaves are unchanged).
@@ -363,6 +373,10 @@ the confiscation against the proof.
 **No participant**: no confiscation is built. An armer whose pledge fails the cut MAY re-arm with a
 fresh one (same commitment); its latest arm counts and moves E, which reopens the window. Only an
 armer's first four `DisputeArmed` (the arm and three re-arms) count, so no one can keep moving E.
+The fold enforces the shape of a re-arm on an armer's fork: it MUST repeat the prior arm's
+`commitment_hash`, and it MUST declare replacement collateral. Collateral after collateral, a fresh
+pledge, is a valid re-arm; the four-arm bound belongs to the eligibility cut, not to the fold.
+Vector: `dispute_rearm.json`.
 If every armer has exhausted its arms and none is a participant, the dispute does not confiscate:
 custody of the vault falls to its post-expiry tiers (DEP-05 §Lifecycle), as for a quorum that
 never disputed.
