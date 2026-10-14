@@ -413,7 +413,11 @@ vault, not left to the winner's goodwill.
   `block_height` at least the governing `service_response_blocks` after the acquire's; and no credit after the
   acquire at or before `proof_update` (a `MigrationCredit` for that migration, or an `OnchainCredit`
   naming the payment). It
-  is self-evident and needs no embedding.
+  is self-evident and needs no embedding. It is judged by the members of the quorum the dispute
+  forked from: the new operator inherits that quorum until its own `QuorumBegin`, though the
+  winner's fork carries no quorum of its own after the `DisputeAcquire`. A member counts itself
+  in that quorum by the ledger's last `QuorumBegin` before the fork, never by the acquired fork.
+  Vector: `unhonoured_obligation.txt`, whose `json` lines are proof 11 as broadcast.
 
 ### Race: Re-establishment vs Confiscation
 
