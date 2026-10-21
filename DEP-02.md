@@ -203,6 +203,7 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 43 | QuorumAddMember | Quorum |
 | 44 | QuorumRemoveMember | Quorum |
 | 46 | QuorumJoin | Quorum |
+| 47 | QuorumChallenge | Quorum (DEP-06 §Spend challenge) |
 | 20 | DepositOpen | Deposits |
 | 21 | DepositClose | Deposits |
 | 23 | DepositKeyRotate | Deposits |
@@ -296,6 +297,10 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 352 | confiscation_txid | 32 | DisputeAcquire (optional; the confiscation the custody change follows) |
 | 354 | source_ledger_id | 32 | DormancyAccept (optional; the source ledger, so members can find its notice) |
 | 356 | uncredited_proof | variable | ObligationRecord (DEP-06; the UncreditedOnchainPayment proof JSON, payment form) |
+| 358 | rotation_rungs | variable | QuorumBegin (DEP-03 §Fee ladder; repeated txid(32), rung 0 first, internal byte order) |
+| 360 | challenged_ledger_id | 32 | QuorumChallenge (the ledger whose vault was spent) |
+| 362 | challenged_txid | 32 | QuorumChallenge (the spend, internal byte order) |
+| 364 | challenged_anchor | 32 | QuorumChallenge (the spend's anchor `H`, DEP-03 §On-Chain State Anchor) |
 | 310 | offer_event_id | 32 | DormancyAccept (Kind 9110 event id) |
 | 312 | accepted_total_msats | 8 | DormancyAccept |
 | 300 | exit_address | variable | DormancyAccept (the receiver's funding scriptPubKey) |

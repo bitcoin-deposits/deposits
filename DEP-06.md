@@ -20,7 +20,7 @@ This document specifies fraud proof construction, embedding, broadcast, and veri
 
 6. **Winner collateral deviation**: the lottery winner's broadcast claim TX deviates from the replacement collateral they committed to in `DisputeArmed` — missing the second input, pointing at a different UTXO, committing less than declared, or adding change outputs that drain the pledged amount. Verifiable on-chain by inspecting the claim TX against the disputant's stored `DisputeArmed` declaration.
 
-7. **Unauthorised vault spend**: the reserves UTXO was spent by any script path (Tier 0–3) to outputs that are neither a `QuorumBegin` rotation recorded on the ledger (including its exit, migration, and splice outputs under DEP-20) nor a confiscation transaction backed by a valid dispute. Evidence is the spending transaction, the ledger's latest `QuorumBegin`, and absence of a matching rotation or `DisputeEnter`. Every key whose signature appears in the witness is an accused; the proof is punitive and is presented on each accused's own ledgers. Verifiable by anyone from chain data plus the ledger.
+7. **Unauthorised vault spend**: the reserves UTXO was spent by any script path (Tier 0–3) by a transaction that is neither a rotation named by a `QuorumBegin` nor an authorised confiscation. It is proven in one of two forms, never on a search that found nothing: **unanchored**, the spend carries no anchor (DEP-03 §On-Chain State Anchor), which no authorised spend lacks; or **lapsed**, the spend's anchor was challenged and no answer came within the ledger's service window (§Spend challenge). Every key whose signature appears in the witness is an accused; the proof is punitive and is presented on each accused's own ledgers.
 
 ## Proof Construction
 
@@ -113,8 +113,68 @@ receiver whose next rotating `QuorumBegin` omits the splice is instead caught by
 For `UnauthorizedVaultSpend`, `accused_pubkey` is one witness signer, `ledger_id` is a ledger that signer operates (the one the proof is presented on), and
 
     evidence_bytes = ascii_hex(spent_ledger_id) || u64_le(governing_quorumbegin_seq) || ascii_hex(spend_tx) || spend_block_hash
+                  [ || ascii_hex(challenge_update) || lapse_block_hash ]          ; lapsed form only
 
-where `spend_block_hash` is the 32 raw bytes of the confirming block. The proof also carries each spent input's prevout (`sats:script_pubkey_hex`, needed for the BIP-341 sighash); these are not hashed, since the transaction commits to them. A verifier rebuilds the reserves from the spent ledger's operator and the `QuorumBegin` at `governing_quorumbegin_seq`, finds the input spending its vault outpoint, matches the witness leaf and control block to a tier, verifies the witness signatures to that tier's threshold, and requires the accused among the signers and the block on its chain. The block is a confirmation, not a date: a verifier that cannot find it (reorganised out, or not yet seen) neither accepts the proof nor holds anything against anyone, and a watcher whose spend's block is reorganised out re-checks the spend and proves it again from the block that confirms it. **Recorded rotation.** A spend is a rotation, and excused, iff its txid is the `new_outpoint_txid` of a `QuorumBegin` signed by the spent ledger's operator (its `LedgerOpen`'s `operator_id`) and reachable from the governing `QuorumBegin` by `previous_hash` links at consecutive sequences, through updates by that operator. Only that `QuorumBegin`'s signature needs verifying: it commits to the whole path by hash. A judge (the watcher before it produces this proof, a verifier before it accepts it) looks for it among every update it can find of the spent ledger, its replica **and** the relay's copies together, not its replica alone. Forks, duplicates and variants of one update with different cosignature sets do not matter, since only the links count. A replica can lag behind its ledger: a gap it has not filled, an update it never received, or no replica at all. A rotation's `QuorumBegin` is published before the rotation is broadcast (DEP-03 §Rotation ordering), so an honest rotation is always on the relay by the time it confirms. A judge that cannot read the relay's history of the spent ledger reaches no verdict and judges again later. It neither produces nor accepts the proof, and holds nothing against anyone. A spend is judged only once it is 3 blocks deep. Vector: `rotation_excuse.txt`. (Signet soak, 2026-10-21: a member whose replica missed three updates before a rotation's `QuorumBegin` judged the spend on that replica alone and proved all five signers. Members that did not follow the ledger accepted the proofs and disputed the signers' own ledgers; the followers rejected them.) A watcher keeps the previous vault watched too until its rotation confirms (a `QuorumBegin` is recorded before its rotation is broadcast, so the old vault is spent after the ledger already names the new one), and treats each theft as owed until its proofs are published to every ledger its signers operate: a relay error, a restart or a later advertisement must not silence it. **Authorised confiscation.** A spend of the vault is a confiscation, and excused, iff it is byte-identical (without its witnesses) to the confiscation the rules build from public state: the ledger's history (its operator's chain by hash links from the `LedgerOpen` that derives its id), the public `DisputeArmed` updates on the disputants' forks, the DEP-03 eligibility cut as of the spend's block (arms above it do not count), the confiscation obligations, the fee rule, the shape the dispute's grounds give (respectful iff every `DisputeEnter` is for a lapsed quorum), and the tier its nLockTime names (a confiscation tier, never the tie-breaker). Its lottery may be over the set the cut yields for any subset of the arms, a proposer having seen fewer late arms, with that subset's snapshot for the obligations. Anything else, a lottery the cut never yields, another amount or an extra output, stays an `UnauthorizedVaultSpend`. Nothing is excused because the verifier built, cosigned or saw it, and a verifier that missed the dispute rebuilds it from the relay and reaches the same verdict. Vector: `authorised_confiscation.txt`. The proof is self-evident and needs no embedding.
+where `spend_block_hash` is the 32 raw bytes of the confirming block. The proof also carries each spent input's prevout (`sats:script_pubkey_hex`, needed for the BIP-341 sighash); these are not hashed, since the transaction commits to them. A verifier rebuilds the reserves from the spent ledger's operator and the `QuorumBegin` at `governing_quorumbegin_seq`, finds the input spending its vault (output 0 of any rung that `QuorumBegin` names, DEP-03 §Fee ladder), matches the witness leaf and control block to a tier, verifies the witness signatures to that tier's threshold, and requires the accused among the signers and the block on its chain. The block is a confirmation, not a date: a verifier that cannot find it (reorganised out, or not yet seen) neither accepts the proof nor holds anything against anyone, and a watcher whose spend's block is reorganised out re-checks the spend and proves it again from the block that confirms it. Then, by form:
+
+- **Unanchored** (no challenge fields): the spend's last output is not an anchor, a zero-value
+  output whose script is exactly `6a20` followed by 32 bytes. Nothing else is needed: the rules
+  give every authorised spend an anchor (DEP-03), and an honest member signs only those (DEP-03
+  §Rotation ordering, §Confiscation fee), so the witness alone convicts its signers.
+- **Lapsed**: the spend's anchor is `H`; `challenge_update` is a signed update, by the operator of
+  the ledger it is on, whose message is a `QuorumChallenge` (DEP-02) naming `spent_ledger_id`, the
+  spend's txid and `H`; and `lapse_block_hash` is a block on the verifier's chain at height at
+  least `start + w`, where `start` is the larger of the challenge's signed `block_height` and the
+  spend's confirming height, and `w` is the spent ledger's `service_response_blocks` (the largest
+  a seated member of the governing `QuorumBegin` declared, 72 if none). A verifier that knows an
+  answer to the challenge (§Spend challenge), found anywhere and at any time, rejects the proof.
+  An answer is positive evidence, so whoever holds one can always rebut; the window only bounds how
+  long silence is tolerated.
+
+Vectors: `vault_spend_anchor.txt` (both forms, answers and decoys), `authorised_confiscation.txt`. A watcher keeps the previous vault watched too until a rung of its rotation confirms, and treats each theft as owed until its proofs are published to every ledger its signers operate: a relay error, a restart or a later advertisement must not silence it. The proof is self-evident and needs no embedding.
+
+### Spend challenge
+
+An anchored spend of a vault names, by its anchor `H`, the one place in the ledger that must answer
+for it. A judge (a watcher before it proves a spend, a verifier before it accepts a proof) looks for
+an **answer**, among every update it can find of the spent ledger (its replica, the relay, and
+Challenge Answer events, Kind 9112), in any order and on any fork:
+
+1. **A rotation**: a `QuorumBegin` on the spent ledger whose `previous_hash` is `H`, signed by the
+   spent ledger's operator (its `LedgerOpen`'s `operator_id`), whose `rotation_rungs` (or, with
+   none recorded, `new_outpoint_txid`) include the spend's txid, and which carries valid
+   cosignatures, over that update, from at least the threshold of the tier the spend's witness uses,
+   by members of that tier. The txid commits to the whole spend, so nothing about it is rebuilt here;
+   whether that `QuorumBegin` itself conforms is judged as for any update (`NonConformingUpdate`,
+   `NonConformingCosignature`), not as a vault spend.
+2. **A confiscation**: the spend is an authorised confiscation (below) whose anchor is the chain hash
+   at its dispute's fork point.
+
+A spend with an answer is excused. A spend without an anchor is proven at once (unanchored form). For
+an anchored spend without an answer, the judge does not prove anything. It records a challenge: it
+appends a **`QuorumChallenge`** (DEP-02 disc 47: `challenged_ledger_id`, `challenged_txid`,
+`challenged_anchor`) to its own ledger, cosigned as any update, and publishes it as a Spend Challenge
+event (Kind 9111, DEP-04) tagged with the spent ledger. An open challenge starts no dispute and no
+arm. Any node holding an answer, not only the accused, publishes it as a Challenge Answer (Kind 9112)
+tagged with the spent ledger: the spent ledger's operator and members watch for challenges to it.
+When a block at `start + w` (above) is on the judge's chain and it still knows no answer, the
+challenge has lapsed and the judge proves the spend in the lapsed form; that proof, like an
+unanchored one, is what may start disputes (DEP-19 §6). A judge challenges a spend once.
+
+What an answer is not. A child of `H` that is not a rotation naming the spend proves nothing about
+the spend's signers: it is exactly what an honest confiscation looks like (the operator's own next
+update, past the fork point), and what an equivocating operator leaves beside a real rotation; such
+an equivocation is proven as `Equivocation` against the operator, who does not sign a Tier-0 spend.
+Nor is the absence of an answer on a replica: a replica may lag (Signet soak, 2026-10-21: a member
+whose replica missed three updates before a rotation's `QuorumBegin` proved all five signers of an
+honest rotation; members that did not follow the ledger accepted the proofs).
+
+Why this cannot frame an honest signer: a member signs a rung only for a final `QuorumBegin` that
+names it (DEP-03 §Rotation ordering), and a confiscation only as the byte-identical rebuild of a
+dispute it holds. Whoever signed an authorised spend therefore holds its answer, and the window gives
+it `w` blocks to publish one that is already on the relay.
+
+**Authorised confiscation.** A spend of the vault is a confiscation, and excused, iff it is byte-identical (without its witnesses) to the confiscation the rules build from public state: the ledger's history (its operator's chain by hash links from the `LedgerOpen` that derives its id), the public `DisputeArmed` updates on the disputants' forks, the DEP-03 eligibility cut as of the spend's block (arms above it do not count), the confiscation obligations, the fee rule, the anchor (the chain hash at the fork point), the shape the dispute's grounds give (respectful iff every `DisputeEnter` is for a lapsed quorum), and the tier its nLockTime names (a confiscation tier, never the tie-breaker). Its lottery may be over the set the cut yields for any subset of the arms, a proposer having seen fewer late arms, with that subset's snapshot for the obligations. Anything else, a lottery the cut never yields, another amount or an extra output, is not a confiscation answer. Nothing is excused because the verifier built, cosigned or saw it, and a verifier that missed the dispute rebuilds it from the relay and reaches the same verdict. Vector: `authorised_confiscation.txt`.
 
 ## Embedding
 
@@ -476,6 +536,20 @@ Wallets continue addressing the same ledger by its `ledger_id`, accepting only r
 5. Verify the new operator's quorum and begin accepting their co-signed updates
 
 Wallets must not accept post-dispute updates until the on-chain claim transaction is confirmed. The claim transaction's witness satisfies the lottery script's `(sum mod N)`-th-disputant rule, so Bitcoin itself proves the new custodian is the script-selected winner. This prevents an attacker from publishing fake `DisputeAcquire` events claiming custody before the lottery resolves.
+
+## Limits
+
+- **Liveness of a recorded rotation.** Members sign a rotation's rungs after its `QuorumBegin` is
+  final (DEP-03 §Rotation ordering). A majority of the spent vault's members that then refuses
+  leaves the rotation recorded but unspent; no proof reaches that, as none reaches a refusal to
+  cosign.
+- **Stuck confiscations.** A confiscation is one transaction at the rule fee (DEP-03
+  §Confiscation fee), without a fee ladder. If it does not confirm, the vault's post-expiry tiers
+  eventually open. A confiscation ladder like the rotation's is the obvious extension.
+- **Answers need a relay.** A challenge lapses only if no answer reaches the judge in `w` blocks. A
+  relay that censors answers for that long, while every honest holder of the answer is cut off from
+  every relay the judge reads, convicts honest signers; a later answer still rebuts the proof for
+  every verifier that sees it.
 
 ## Related DEPs
 

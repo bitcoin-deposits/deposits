@@ -77,15 +77,18 @@ When a quorum is established or refreshed, the operator constructs a new Taproot
 - **reserves_id**: the new Taproot address
 - **reserves_amount**: the reserves portion of the UTXO (deposit capacity, msats)
 - **collateral_amount**: the collateral portion of the UTXO (security bond, msats)
-- **spending_txid**: the txid spending the old reserves
-- **new_outpoint_txid**: the txid of the new reserves output
+- **spending_txid**: the txid spending the old reserves (rung 0 of its fee ladder, below)
+- **new_outpoint_txid**: the txid of the new reserves output (rung 0)
 - **new_outpoint_vout**: the vout index
+- **rotation_rungs**: the txids of every rung of the rotation's fee ladder, rung 0 first (DEP-02 type
+  358; §"Fee ladder"). The new vault is output 0 of whichever rung confirms.
 - **quorum_members**: the pubkeys included in the new multisig. MUST match the set of members staged via prior `QuorumAddMember` operations (and not since removed by `QuorumRemoveMember`) — `QuorumBegin` promotes exactly that staged set to the new active quorum (see DEP-05 §QuorumBegin).
 - **quorum_member_ledger_ids**: parallel array to `quorum_members` carrying each member's own ledger_id (the ledger holding their collateral, sourced from the matching `QuorumAddMember.member_ledger_id`). Lets fraud-proof verifiers and explorers identify the ledger backing each cosigner's `member_ledger_hash` without re-deriving the mapping from prior `QuorumAddMember` history. Older `QuorumBegin` events omit this field; consumers fall back to walking `QuorumAddMember` operations on the operator's ledger.
 - **quorum_expiry**: block height when the quorum expires (shortest member commitment)
 - **exit_cutoff_height**, **exit_outputs**, **splice_in_outpoint** / **splice_in_amount_msats**, **migration_manifest** / **migration_receiver** / **migration_vout**: settlement fields under DEP-20 (wire tags in DEP-02 §Ledger). Cosigners verify each exit and migration output against the recording update and the due-request set, and the splice input against the chain.
 
-The on-chain UTXO value MUST equal `reserves_amount + collateral_amount`. A rotation MAY carry exit outputs and a splice-in input (DEP-20 §3–4); the new vault's value is then `old vault + splice_in − Σ exits − fee`, with `reserves_amount` reduced by `Σ exits` and obligations reduced by the same amount in the recording update. Cosigners MUST verify, against their own chain source, that the referenced outpoint (`new_outpoint_txid`, `new_outpoint_vout`):
+The on-chain UTXO value MUST equal `reserves_amount + collateral_amount`, less the confirmed rung's
+extra fee when a rotation's higher rung confirms (§"Fee ladder"). A rotation MAY carry exit outputs and a splice-in input (DEP-20 §3–4); the new vault's value is then `old vault + splice_in − Σ exits − fee`, with `reserves_amount` reduced by `Σ exits` and obligations reduced by the same amount in the recording update. Cosigners MUST verify, against their own chain source, that the referenced outpoint (`new_outpoint_txid`, `new_outpoint_vout`):
 
 1. exists on-chain,
 2. is unspent,
@@ -107,7 +110,10 @@ sign, and sign only an identical one, so its shape and fee are rules:
 - output 0: the new vault (the next quorum's reserves, `new_outpoint_vout` = 0); then one output per
   `exit_outputs` entry in recorded order, valued `floor(amount_msats / 1000)`, to the exit's address
   (DEP-20 §3); then, with a migration (DEP-20 §8.3), one output of the manifest's total to the
-  receiver's funding address. No other outputs (no anchor, see below).
+  receiver's funding address; last, the **anchor**: a zero-value output whose script is
+  `OP_RETURN <previous_hash>` (`6a20` followed by the 32 bytes), where `previous_hash` is that of the
+  `QuorumBegin` recording the rotation, the chain hash of the update it extends (§"On-Chain State
+  Anchor"). No other outputs.
 
     rotation_vsize = 46 + 30 × voters + Σ_outputs (9 + len(script_pubkey)) + splice_vsize
     rotation_fee   = feerate × rotation_vsize   sats
@@ -118,13 +124,43 @@ which is spent through the same tier and leaf as input 0: each signing member re
 for each such input (`rotation_sign`: `signature` for input 0, `splice_signature` for input 1).
 
 where `voters` counts the keys of the vault being spent (members and operator), the sum runs over
-every output including the new vault (each exit output already bears its own share, DEP-20 §3), and `feerate` is `reference_feerate_sat_vb` from the
-`QuorumBegin` governing the spent vault, or 2 sat/vB when none is recorded (as for the
-confiscation fee). The new vault is valued `old vault + splice_in − Σ exit and migration outputs −
-rotation_fee`; a rotation leaving it below 330 sats is invalid. Cosigners MUST refuse a proposal
-that differs in any byte from the one they build. Implementations agree byte for byte on the shared
-vector `rotation_tx.txt` (plain, with exits, with splice-in, with a vault-script splice-in, with
-migration).
+every output including the new vault and the anchor (each exit output already bears its own
+share, DEP-20 §3; the anchor's is `9 + 34 = 43` vB: 8 value, 1 length, 34 script), and `feerate` is
+the rung's feerate (§"Fee ladder"), from `reference_feerate_sat_vb` in the `QuorumBegin` governing the
+spent vault, or 2 sat/vB when none is recorded (as for the confiscation fee). The new vault is valued
+`old vault + splice_in − Σ exit and migration outputs − rotation_fee`; a rotation leaving rung 0's
+new vault below 330 sats is invalid. Cosigners MUST refuse a proposal that differs in any byte from
+the one they build. Implementations agree byte for byte on the shared vector `rotation_tx.txt`
+(plain, with exits, with splice-in, with a vault-script splice-in, with migration, and every rung of
+each).
+
+### Fee ladder
+
+A rotation is signed at `k = 4` feerates, so it can be bumped by replacement (BIP-125) without
+signing anything new. With `m` the feerate above (the governing `reference_feerate_sat_vb`, or 2):
+
+    rung i (i = 0 … 3):   feerate_i = m × 2^i     fee_i = feerate_i × rotation_vsize
+
+Every rung has the same inputs, nLockTime, nSequences and outputs, the anchor included, except output
+0, the new vault, which is `old vault + splice_in − Σ exit and migration outputs − fee_i`. Rungs
+share one vsize, so each pays twice its predecessor's fee and feerate: a replacement's extra fee
+`fee_{i+1} − fee_i = feerate_i × vsize` is at least the default incremental relay fee (1 sat/vB ×
+vsize) because `m ≥ 1`, it pays a higher feerate, spends the same inputs, and replaces one
+transaction; Bitcoin Core relays each rung as a replacement of the one below.
+
+The ladder stops early: rung i > 0 exists only while its new vault is at least 330 sats and its extra
+fee `Δ_i = fee_i − fee_0` (sats) satisfies `1000 × Δ_i ≤ collateral_amount` of the recording
+`QuorumBegin`. The
+extra fee is borne by the collateral, never the reserves: when rung i confirms, the vault holds
+`reserves_amount + collateral_amount − 1000 × Δ_i` msats and every rule that reads the vault's
+collateral reads `collateral_amount − 1000 × Δ_i`. The `QuorumBegin`'s amounts are rung 0's. Exits
+and migration outputs pay their share at rung 0's feerate (DEP-20 §3) whichever rung confirms.
+
+The ledger's vault is output 0 of the rung that confirmed. Every implementation determines it from
+the chain the same way: the rung whose output 0 exists on its chain (unspent, or spent by a later
+confirmed transaction). Only one can confirm, since all spend the same outpoint; before one confirms
+the vault is pending at all of them. A spend of the vault names its outpoint, so a judge of a later
+spend reads the rung from the spending input without a chain lookup.
 
 ### Reference feerate
 
@@ -142,40 +178,59 @@ at 2 sat/vB.
 
 ### Rotation ordering
 
-A rotation is recorded before it is broadcast, so no watcher ever sees the old vault spent by a
-transaction the ledger does not yet name:
+A rotation is recorded before anyone signs it, so every signature on a spend of the vault is given
+for a `QuorumBegin` that already names it:
 
-1. The operator builds the rotation (above), gathers the spending tier's signatures from the
-   current members (`rotation_sign`), and assembles it. Its txid does not depend on the witness,
-   so it is known from the unsigned transaction.
-2. The operator appends the `QuorumBegin` with `spending_txid` = `new_outpoint_txid` = that txid and
-   `new_outpoint_vout` = 0. Its cosign request carries the signed transaction as `rotation_tx`
-   (hex). Instead of the on-chain outpoint check, a cosigner MUST verify that `rotation_tx` has
-   that txid; is, without its witness, byte-identical to the rotation it builds; spends the
-   replica's current vault; carries a witness satisfying a tier of that vault (valid signatures to
-   the tier's threshold); and pays output 0 `(reserves_amount + collateral_amount) / 1000` sats to
-   `reserves_id`. A `QuorumBegin` with no current vault (the first, or the first after a
-   `DisputeAcquire`) keeps the on-chain check.
-3. Once the `QuorumBegin` is published the operator broadcasts the rotation and publishes it as a
-   **Rotation Transaction** event (Kind 9107, DEP-04: `{ledger_id, sequence, tx}`), so any member
-   or watcher can broadcast it. Every cosigner of the `QuorumBegin` MUST rebroadcast it while the
-   new vault is unconfirmed and the old vault unspent.
-4. If the old vault is spent by any other transaction, that spend is an `UnauthorizedVaultSpend`
-   (DEP-06) as usual. Because cosigners verified the witness and the fee is the rule above, a
-   recorded rotation stays valid until it confirms.
+1. The operator builds every rung (above). A txid does not depend on the witness, so each rung's
+   txid is known from the unsigned transaction.
+2. The operator appends the `QuorumBegin` with `spending_txid` = `new_outpoint_txid` = rung 0's
+   txid, `new_outpoint_vout` = 0 and `rotation_rungs` the rungs' txids. Its cosign request carries
+   the unsigned rungs as `rotation_rungs_tx` (hex, rung order). Instead of the on-chain outpoint
+   check, a cosigner MUST verify that the rungs are, byte for byte, the ladder it builds; that their
+   txids are `rotation_rungs` in order, rung 0's also `new_outpoint_txid`; that they spend the
+   replica's current vault; and that rung 0 pays output 0 `(reserves_amount + collateral_amount) /
+   1000` sats to `reserves_id`. A `QuorumBegin` with no current vault (the first, or the first after
+   a `DisputeAcquire`) keeps the on-chain check.
+3. Once the `QuorumBegin` is final (operator-signed and published), the operator gathers the spending
+   tier's signatures on every rung from the members of the spent vault (`rotation_sign`, carrying the
+   final `QuorumBegin` update). A member signs a rung only for a final `QuorumBegin` that extends its
+   replica (or whose `previous_hash` its replica holds), names that rung, and whose ladder it
+   rebuilds; it MUST NOT sign a vault spend that no final `QuorumBegin` names. Each signer returns one
+   signature per rung (and per rung for a vault-script splice-in).
+4. The operator assembles every rung, broadcasts rung 0, and publishes each rung as a **Rotation
+   Transaction** event (Kind 9107, DEP-04: `{ledger_id, sequence, rung, tx}`), so any member or
+   watcher can broadcast it. Every cosigner of the `QuorumBegin` MUST rebroadcast the highest rung
+   broadcast so far while the old vault is unspent, and MAY broadcast the next rung (a BIP-125
+   replacement) once the current one has stayed unconfirmed for 6 blocks (policy, not consensus).
+5. If the old vault is spent by any other transaction, that spend is an `UnauthorizedVaultSpend`
+   (DEP-06).
 
-A vault watch therefore authorises a spend whose txid is a recorded `QuorumBegin`'s
-`new_outpoint_txid`, found on its replica or the relay (DEP-06 §Recorded rotation). A watcher whose
-replica has not yet applied the `QuorumBegin` finds it on the relay, where it was published before
-the broadcast. The judgement waits for the spend to be 3 blocks deep (DEP-06).
+Signing after recording is what makes a challenge answerable (DEP-06 §Spend challenge): an honest
+signer of any rung holds the `QuorumBegin` that names it. The order trades liveness for that: a
+`QuorumBegin` whose rungs the spent vault's members then refuse to sign records a rotation that never
+happens, as a quorum refusing to cosign stalls a ledger; it is not a fault any proof reaches.
+
+A vault watch authorises a spend that answers its anchor (DEP-06 §Spend challenge): the judgement
+waits for the spend to be 3 blocks deep (DEP-06).
 
 ### On-Chain State Anchor
 
-The rotation transaction carries no anchor: the `QuorumBegin`'s `chain_hash` commits to `new_outpoint_txid`, so the transaction cannot also commit to it. An operator MAY publish an anchor separately as an `OP_RETURN` containing the `chain_hash` at the `QuorumBegin` sequence. This gives wallets an on-chain anchor to verify that the ledger state on relays matches the operator's committed state at the time of rotation — without trusting any relay. The `OP_RETURN` output is:
+Every authorised spend of a vault carries, as its last output, a zero-value anchor:
 
-    OP_RETURN <chain_hash (32 bytes)>
+    OP_RETURN <H (32 bytes)>          script 6a20 ‖ H
 
-This is cheap (one additional output on a transaction the operator is already making) and provides a verifiable checkpoint for wallets that suspect relay censorship or data loss.
+- a rotation: `H` is the recording `QuorumBegin`'s `previous_hash`, the chain hash of the update it
+  extends. It cannot be the `QuorumBegin`'s own chain hash, which commits to `new_outpoint_txid`;
+  the update before it exists before the rotation is built, so there is no circularity, and the
+  `QuorumBegin` is the unique child of `H` on the operator's chain;
+- a confiscation: `H` is the chain hash of the disputed ledger's update at the dispute's fork point,
+  the lowest `last_valid_sequence` its `DisputeEnter`s name (DEP-06 §Phase 2), the
+  update the `DisputeEnter`s extend.
+
+The anchor is what a spend is judged by: a vault spend without one is theft on its face, and one with
+one names the single place in the ledger that must answer for it (DEP-06 §Spend challenge). It also
+gives wallets an on-chain checkpoint of the ledger's state at each rotation, without trusting any
+relay. It costs 43 vB per spend.
 
 ## Custody Lottery
 
@@ -390,22 +445,24 @@ claiming, is caught at claim time as a `WinnerCollateralDeviation` (below and DE
 Cosigners rebuild the confiscation transaction from public state and sign only an identical one,
 so its fee is a rule, not a proposer's choice:
 
-    confiscation_fee = feerate × (120 + 30 × voters + Σ_swept (41 + 30 × voters))   sats
+    confiscation_fee = feerate × (163 + 30 × voters + Σ_swept (41 + 30 × voters))   sats
 
 where `voters` is the number of keys in the vault (the quorum members and the operator) and
 `feerate` is `reference_feerate_sat_vb` from the governing `QuorumBegin` (DEP-20 §8), or 2 sat/vB
 when none is recorded. `120 + 30 × voters` vB bounds the confiscation's size at any tier (one
 input, at most two outputs, a witness of at most one signature per voter plus the tier leaf and
-control block). Every output value then follows: the punitive shape pays `vault − fee` to the
+control block); 43 vB more pay for the anchor (§"On-Chain State Anchor"). Every output value then follows: the punitive shape pays `vault − fee` to the
 lottery output; the respectful shape pays `max(obligations, 330)` to it and `vault − that − fee`
 to the operator's P2WPKH, or collapses to the punitive shape if that change is below 294 sats.
 The transaction is version 2, nLockTime the tier's CLTV; input 0 the vault and inputs 1.. the
 swept migration outputs (DEP-06 §Confiscation obligations), each at nSequence `0xfffffffd` and
 each spent through the same tier (a signer returns one signature per input). Output 0 is the
-lottery output, then the operator's change (respectful), then the obligation splice-outs. With
+lottery output, then the operator's change (respectful), then the obligation splice-outs, then the
+anchor (`OP_RETURN <chain hash at the fork point>`). With
 obligations the lottery value is: punitive, `inputs − fee − Σ splice-outs`; respectful,
 `max(obligations + residue, 330)` (the ledger's obligations plus the owed entries not spliced out).
-Cosigners MUST refuse a proposal that differs in any byte from the one they build.
+Cosigners MUST refuse a proposal that differs in any byte from the one they build. A confiscation
+is a single transaction at this fee, not a ladder (DEP-06 §Limits).
 
 The lottery claim's fee is `claim_fee_floor` (above), so a participant's declared replacement
 collateral always covers it. Its shape is fixed too: version 2, nLockTime 0; input 0 the lottery
