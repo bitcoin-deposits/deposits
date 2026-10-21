@@ -211,8 +211,7 @@ identity key. Any seat quote (§2) serves.
    `{identity, handoff_seq, from_measurement, to_measurement, transport_quote_hash}`.
    `handoff_seq` is one more than the previous handoff's, or 1 after genesis. The old enclave then
    erases the secret and refuses to sign anything further as that identity.
-4. The new enclave publishes the encrypted secret's receipt by signing, with the identity key, any
-   later event.
+4. The new enclave shows it received the secret by signing its next event with the identity key.
 
 A verifier walks the chain from genesis through each handoff to the current quote. At every step,
 the image holding the key released it, and only to an image it approved.
