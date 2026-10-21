@@ -165,8 +165,9 @@ transaction the ledger does not yet name:
    recorded rotation stays valid until it confirms.
 
 A vault watch therefore authorises a spend whose txid is a recorded `QuorumBegin`'s
-`new_outpoint_txid` at once; the confirmation grace (DEP-06) remains only as a backstop for a
-watcher that has not yet received the `QuorumBegin`.
+`new_outpoint_txid`, found on its replica or the relay (DEP-06 §Recorded rotation). A watcher whose
+replica has not yet applied the `QuorumBegin` finds it on the relay, where it was published before
+the broadcast. The judgement waits for the spend to be 3 blocks deep (DEP-06).
 
 ### On-Chain State Anchor
 
