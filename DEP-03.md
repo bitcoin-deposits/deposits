@@ -148,6 +148,9 @@ share one vsize, so each pays twice its predecessor's fee and feerate: a replace
 vsize) because `m ≥ 1`, it pays a higher feerate, spends the same inputs, and replaces one
 transaction; Bitcoin Core relays each rung as a replacement of the one below.
 
+A rotation that pays a migration output (DEP-20 §8.3) has one rung: receivers and obligation records
+name that output by the rotation's `new_outpoint_txid`, which must not depend on which rung confirms.
+
 The ladder stops early: rung i > 0 exists only while its new vault is at least 330 sats and its extra
 fee `Δ_i = fee_i − fee_0` (sats) satisfies `1000 × Δ_i ≤ collateral_amount` of the recording
 `QuorumBegin`. The
@@ -191,17 +194,21 @@ for a `QuorumBegin` that already names it:
    replica's current vault; and that rung 0 pays output 0 `(reserves_amount + collateral_amount) /
    1000` sats to `reserves_id`. A `QuorumBegin` with no current vault (the first, or the first after
    a `DisputeAcquire`) keeps the on-chain check.
-3. Once the `QuorumBegin` is final (operator-signed and published), the operator gathers the spending
-   tier's signatures on every rung from the members of the spent vault (`rotation_sign`, carrying the
-   final `QuorumBegin` update). A member signs a rung only for a final `QuorumBegin` that extends its
-   replica (or whose `previous_hash` its replica holds), names that rung, and whose ladder it
-   rebuilds; it MUST NOT sign a vault spend that no final `QuorumBegin` names. Each signer returns one
-   signature per rung (and per rung for a vault-script splice-in).
+3. Once the `QuorumBegin` is final (operator-signed, cosigned to its requirement, published), the
+   operator gathers the spending tier's signatures on every rung from the members of the spent vault:
+   a `rotation_sign` request carrying `quorum_begin` (the final update, base64), `unsigned_rungs`
+   (hex, rung order) and `tier_index`. A member signs only for a final `QuorumBegin` that extends its
+   replica as it stood before it, whose rungs are the ladder it rebuilds from that replica at the
+   `QuorumBegin`'s signed height; it MUST NOT sign a vault spend that no final `QuorumBegin` names. The
+   rungs' nLockTime names the tier (any tier open at that height). It answers `signatures` (one per
+   rung, hex) and, with a vault-script splice-in, `splice_signatures` (one per rung for input 1).
 4. The operator assembles every rung, broadcasts rung 0, and publishes each rung as a **Rotation
    Transaction** event (Kind 9107, DEP-04: `{ledger_id, sequence, rung, tx}`), so any member or
-   watcher can broadcast it. Every cosigner of the `QuorumBegin` MUST rebroadcast the highest rung
-   broadcast so far while the old vault is unspent, and MAY broadcast the next rung (a BIP-125
-   replacement) once the current one has stayed unconfirmed for 6 blocks (policy, not consensus).
+   watcher can broadcast it. Every holder of the rungs (the operator, the cosigners, any watcher) MUST
+   keep broadcasting while no rung has confirmed, and broadcasts rung `min(k − 1, ⌊(tip − h) / 6⌋)`,
+   `h` the `QuorumBegin`'s signed height: rung i once the `QuorumBegin` is 6·i blocks old, a BIP-125
+   replacement of the one below. Every holder computes the same schedule, so all push the same rung
+   (policy, not consensus).
 5. If the old vault is spent by any other transaction, that spend is an `UnauthorizedVaultSpend`
    (DEP-06).
 
