@@ -65,15 +65,17 @@ An operator or member has a long-lived **identity key** (ads, ledger identity) a
 `(epoch vault pubkey, attestation quote, image measurement)`. A signer upgrade replaces only the
 epoch key, at rotation.
 
-The quote binds the keys through its report data, so it cannot be moved to another key:
+The quote carries both keys in its report data, so it cannot be moved to another key:
 
-    binding = SHA256("DEP-21/seat" ‖ identity pubkey(32) ‖ epoch vault pubkey(32))
-    report_data(64) = binding(32) ‖ 0x00 × 32
+    seat report_data(64) = identity pubkey(32) ‖ epoch vault pubkey(32)
 
 The report data goes in SEV-SNP's `REPORT_DATA`, TDX's `REPORTDATA`, or a Nitro attestation's
-`user_data`. The second half is reserved and MUST be zero. A quote is valid for a seat when its
-signature chain verifies to the vendor root, it is not a debug guest, and its report data equals the
-seat's binding.
+`user_data`. A quote is valid for a seat when its signature chain verifies to the vendor root, it is
+not a debug guest, and its report data is the seat's identity key followed by its epoch vault key.
+
+The vault key MUST be in the quote itself. Attesting only the identity key, and letting it sign the
+vault key, would let anyone holding the identity's secret attach an unattested vault key to an
+attested identity.
 
 Certificate validity windows and TCB status are not judged at verification time; doing so would
 make conformance depend on the judge's clock. They are handled by revocation (§6). The measurement
@@ -188,6 +190,49 @@ attacker is input from outside the quorum (depositors, relays, chain data, migra
 non-member proofs) and bugs in approved images. Implementation diversity and `max_per_source` are the
 defence against both, so this DEP does not replace audits of the signer.
 
+### 8. Identity continuity
+
+An identity key generated inside an enclave dies with that enclave's image unless it can move. A
+handoff moves it to a new enclave, and a chain of handoffs proves where it has been. Only the
+identity key moves. Vault keys are per epoch (§2), so the new enclave generates a fresh one at its
+next rotation, and no key that controls funds is ever transferred.
+
+**Genesis.** An identity's chain starts at a quote, from image M₀, whose report data begins with the
+identity key. Any seat quote (§2) serves.
+
+**Handoff.** To move from image Mᵢ to Mᵢ₊₁:
+
+1. The new enclave publishes a transport quote:
+   `report_data = identity pubkey(32) ‖ SHA256("DEP-21/handoff" ‖ transport pubkey(32))`.
+   The hash makes the second half unusable as a vault key: nobody knows a secret key for it.
+2. The old enclave verifies the quote and checks that Mᵢ₊₁ is approved under the image policy it
+   enforces (§7). If so, it encrypts the identity secret to the transport key.
+3. The old enclave signs, with the identity key, a handoff event (Nostr kind 9108):
+   `{identity, handoff_seq, from_measurement, to_measurement, transport_quote_hash}`.
+   `handoff_seq` is one more than the previous handoff's, or 1 after genesis. The old enclave then
+   erases the secret and refuses to sign anything further as that identity.
+4. The new enclave publishes the encrypted secret's receipt by signing, with the identity key, any
+   later event.
+
+A verifier walks the chain from genesis through each handoff to the current quote. At every step,
+the image holding the key released it, and only to an image it approved.
+
+**Recording.** `QuorumBegin` records, per seat, `seat_handoffs` (type 334): `u32 handoff_seq ‖
+handoff event id(32)`, both zero at genesis. A seat's `handoff_seq` never decreases from one epoch
+to the next. A signer refuses to cosign with an identity at a lower `handoff_seq` than the highest
+it has seen for that identity.
+
+**Forks.** Erasure cannot be proven, so after a handoff two enclaves may hold the secret. Two
+handoff events signed by one identity with the same `handoff_seq` prove a fork. A forked identity
+is treated as exposed from the fork on. Two live copies that both sign ledger updates are already
+provable as `Equivocation` (DEP-06).
+
+**Exposure.** A key is only as safe as every image it has lived in. An identity whose chain passes
+through an image of a demoted class (§6), or a demoted measurement, is exposed from the demotion
+on: anything signed by the identity alone after that (ads, handoffs) proves nothing. Its seats are
+unaffected, because each seat's vault key is attested on its own by its own quote. A stolen
+identity costs reputation, not deposits.
+
 ## Rationale
 
 - **Per-deposit consent replaces a notice period.** No waiting time to calibrate, and no reliance
@@ -198,6 +243,9 @@ defence against both, so this DEP does not replace audits of the signer.
 - **Degradation, not failure.** A broken class is repriced, and the collateral regime remains.
   Size R for the tolerance wanted after the worst planned break (§2i).
 - **No griefing.** Exits pay their own way, so a policy cannot be used to impose cost on an operator.
+- **Identities outlive images; funds keys never move.** Reputation is worth carrying across an
+  upgrade, so the identity can be handed off between attested images. Vault keys are rebuilt each
+  epoch, so a handoff gone wrong can never move money.
 - **The signers police the seating.** A ledger rule alone only lets a bad seating be proven after
   the fact. An attested signer that checks its peers' quotes refuses to create the bad seating at
   all, and the ledger rule (§7) still catches a quorum whose signers were broken.
@@ -252,4 +300,7 @@ migration, fees).
 6. Whether a seat's `source` should come from the endorsement or from a field the quote itself
    attests (for example SNP `HOST_DATA` or a Nitro PCR), so that `max_per_source` cannot be gamed by
    endorsing one codebase under two names.
-7. A shared signer implementation or two independent ones (independence is a class axis of its own).
+7. Whether a fork (§8) should be a DEP-06 proof with a slashing consequence, or only exposure.
+8. Whether the handoff's encrypted payload must be published (so that receipt is provable) or can
+   stay between the two enclaves.
+9. A shared signer implementation or two independent ones (independence is a class axis of its own).
