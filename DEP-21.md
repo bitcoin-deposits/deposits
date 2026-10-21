@@ -60,12 +60,22 @@ here and implemented identically, or shared, across implementations.
 
 ### 2. Identity and epoch keys
 
-An operator or member has a long-lived **identity key** (ads, ledger identity) and a per-epoch
-**vault key** held by its signer. The identity key signs, in the DEP-04 ad, a binding
-`(epoch vault pubkey, attestation quote, image measurement)`. A signer upgrade replaces only the
-epoch key, at rotation.
+An operator or member has a long-lived **identity key** (ads, ledger identity, the target of
+contagion and slashing) and a per-epoch **vault key** for each seat it holds. The identity key may
+be held anywhere: cold, in an HSM, or in an enclave (§8). One identity may hold any number of
+seats, on any number of signers and platforms.
 
-The quote carries both keys in its report data, so it cannot be moved to another key:
+**Attestation is a pricing signal, not a requirement.** No rule outside this DEP reads it, and a
+seat with no quote is an ordinary seat. Only opt-in policies read attestation: a deposit's (§4)
+and a quorum's (§7).
+
+A seat is **attested** when both of the following hold:
+
+1. **Consent.** The identity key signs, in the DEP-04 ad, the binding
+   `(epoch vault pubkey, attestation quote, image measurement)`. Without this, anyone running an
+   approved image could claim someone else's identity.
+2. **Attestation.** The quote carries both keys in its report data, so it cannot be moved to
+   another key:
 
     seat report_data(64) = identity pubkey(32) ‖ epoch vault pubkey(32)
 
@@ -73,9 +83,10 @@ The report data goes in SEV-SNP's `REPORT_DATA`, TDX's `REPORTDATA`, or a Nitro 
 `user_data`. A quote is valid for a seat when its signature chain verifies to the vendor root, it is
 not a debug guest, and its report data is the seat's identity key followed by its epoch vault key.
 
-The vault key MUST be in the quote itself. Attesting only the identity key, and letting it sign the
-vault key, would let anyone holding the identity's secret attach an unattested vault key to an
-attested identity.
+Neither half suffices alone. A stolen identity key cannot produce a quote, so it cannot attach an
+unattested vault key. An approved enclave cannot produce the identity's signature, so it cannot
+claim an identity. This is why the vault key MUST be in the quote itself, and why funds safety never
+depends on where the identity key is kept.
 
 Certificate validity windows and TCB status are not judged at verification time; doing so would
 make conformance depend on the judge's clock. They are handled by revocation (§6). The measurement
@@ -192,6 +203,11 @@ defence against both, so this DEP does not replace audits of the signer.
 
 ### 8. Identity continuity
 
+This section is optional. It applies only to an operator that chooses to keep its identity key
+inside an enclave, so that not even the operator can sign as that identity outside an approved
+image. Policies MAY treat an enclave-held identity as a further pricing signal. An identity held
+anywhere else ignores this section.
+
 An identity key generated inside an enclave dies with that enclave's image unless it can move. A
 handoff moves it to a new enclave, and a chain of handoffs proves where it has been. Only the
 identity key moves. Vault keys are per epoch (§2), so the new enclave generates a fresh one at its
@@ -217,7 +233,7 @@ A verifier walks the chain from genesis through each handoff to the current quot
 the image holding the key released it, and only to an image it approved.
 
 **Recording.** `QuorumBegin` records, per seat, `seat_handoffs` (type 334): `u32 handoff_seq ‖
-handoff event id(32)`, both zero at genesis. A seat's `handoff_seq` never decreases from one epoch
+handoff event id(32)`, both zero at genesis or for an identity not held in an enclave. A seat's `handoff_seq` never decreases from one epoch
 to the next. A signer refuses to cosign with an identity at a lower `handoff_seq` than the highest
 it has seen for that identity.
 
@@ -242,9 +258,14 @@ identity costs reputation, not deposits.
 - **Degradation, not failure.** A broken class is repriced, and the collateral regime remains.
   Size R for the tolerance wanted after the worst planned break (§2i).
 - **No griefing.** Exits pay their own way, so a policy cannot be used to impose cost on an operator.
-- **Identities outlive images; funds keys never move.** Reputation is worth carrying across an
-  upgrade, so the identity can be handed off between attested images. Vault keys are rebuilt each
-  epoch, so a handoff gone wrong can never move money.
+- **A signal, not a requirement.** Attestation only changes how a seat is priced by the policies
+  that ask for it. Unattested operators keep working under the collateral rules, and attested ones
+  earn the deposits whose policies demand attestation.
+- **Consent and attestation are separate.** The identity says "this seat is mine" and the quote
+  says "this vault key lives in this image". Keeping them apart lets an identity run many signers
+  across platforms, and lets the identity live wherever its operator keeps it safest.
+- **Funds keys never move.** Vault keys are rebuilt each epoch. An enclave-held identity can be
+  handed off between images (§8), but a handoff gone wrong can never move money.
 - **The signers police the seating.** A ledger rule alone only lets a bad seating be proven after
   the fact. An attested signer that checks its peers' quotes refuses to create the bad seating at
   all, and the ledger rule (§7) still catches a quorum whose signers were broken.
