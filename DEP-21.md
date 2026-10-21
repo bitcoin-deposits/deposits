@@ -98,10 +98,10 @@ Each `QuorumBegin` records, per seat (parallel to `quorum_members`):
 
 | Type | Name | Content |
 |---|---|---|
-| 320 | `seat_attestations` | repeated `u16 len ‖ attestation quote` (empty = unattested) |
-| 322 | `seat_measurements` | repeated `measurement(48)` |
-| 324 | `seat_classes` | repeated `vendor(1) ‖ platform(u16 len ‖ id)` |
-| 326 | `seat_endorsements` | repeated `u16 count ‖ count × endorsement event id(32)` |
+| 400 | `seat_attestations` | repeated `u16 len ‖ attestation quote` (empty = unattested) |
+| 402 | `seat_measurements` | repeated `measurement(48)` |
+| 404 | `seat_classes` | repeated `vendor(1) ‖ platform(u16 len ‖ id)` |
+| 406 | `seat_endorsements` | repeated `u16 count ‖ count × endorsement event id(32)` |
 
 A seat's image may differ from the previous epoch's only through a new `QuorumBegin`.
 
@@ -112,8 +112,8 @@ key a depositor chooses to trust: an auditor, a wallet vendor, a reproducible-bu
 
 ### 4. Deposit trust policy
 
-`DepositOpen` MAY carry `trust_policy` (type 328, variable): a policy document, or its hash with
-the document published alongside (type 330, `trust_policy_hash`, 32). A policy states:
+`DepositOpen` MAY carry `trust_policy` (type 408, variable): a policy document, or its hash with
+the document published alongside (type 410, `trust_policy_hash`, 32). A policy states:
 
 - **roots:** a set of trust-root keys and a threshold k;
 - **seating:** the minimum number of seats that are attested by an intact class *and* whose
@@ -163,7 +163,7 @@ silently carries over to an image or a class it did not accept.
 §4 lets a depositor decide which quorums to trust. This section lets a quorum decide which seats it
 will admit, enforced by the attested signers themselves (§1 item 4).
 
-`QuorumBegin` MAY carry `image_policy` (type 332, variable):
+`QuorumBegin` MAY carry `image_policy` (type 412, variable):
 
 | Field | Content |
 |---|---|
@@ -232,7 +232,7 @@ identity key. Any seat quote (§2) serves.
 A verifier walks the chain from genesis through each handoff to the current quote. At every step,
 the image holding the key released it, and only to an image it approved.
 
-**Recording.** `QuorumBegin` records, per seat, `seat_handoffs` (type 334): `u32 handoff_seq ‖
+**Recording.** `QuorumBegin` records, per seat, `seat_handoffs` (type 414): `u32 handoff_seq ‖
 handoff event id(32)`, both zero at genesis or for an identity not held in an enclave. A seat's `handoff_seq` never decreases from one epoch
 to the next. A signer refuses to cosign with an identity at a lower `handoff_seq` than the highest
 it has seen for that identity.
