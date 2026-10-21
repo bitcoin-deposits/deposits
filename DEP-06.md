@@ -142,9 +142,11 @@ Challenge Answer events, Kind 9112), in any order and on any fork:
 
 1. **A rotation**: a `QuorumBegin` on the spent ledger whose `previous_hash` is `H`, signed by the
    spent ledger's operator (its `LedgerOpen`'s `operator_id`), whose `rotation_rungs` (or, with
-   none recorded, `new_outpoint_txid`) include the spend's txid, and which carries valid
-   cosignatures, over that update, from at least the threshold of the tier the spend's witness uses,
-   by members of that tier. The txid commits to the whole spend, so nothing about it is rebuilt here;
+   none recorded, `new_outpoint_txid`) include the spend's txid, and whose signatures by keys of the
+   tier the spend's witness uses reach that tier's threshold: valid cosignatures over the update, and
+   the operator's own signature on it when the operator's key is one of the tier's (the tiers count
+   every voter, the operator included, so a `QuorumBegin` cosigned to its own requirement, DEP-05
+   §Lifecycle, reaches the threshold of the tier that mirrors it). The txid commits to the whole spend, so nothing about it is rebuilt here;
    whether that `QuorumBegin` itself conforms is judged as for any update (`NonConformingUpdate`,
    `NonConformingCosignature`), not as a vault spend.
 2. **A confiscation**: the spend is an authorised confiscation (below) whose anchor is the chain hash
