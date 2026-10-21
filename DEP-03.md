@@ -230,9 +230,13 @@ Every authorised spend of a vault carries, as its last output, a zero-value anch
   extends. It cannot be the `QuorumBegin`'s own chain hash, which commits to `new_outpoint_txid`;
   the update before it exists before the rotation is built, so there is no circularity, and the
   `QuorumBegin` is the unique child of `H` on the operator's chain;
-- a confiscation: `H` is the chain hash of the disputed ledger's update at the dispute's fork point,
-  the lowest `last_valid_sequence` its `DisputeEnter`s name (DEP-06 §Phase 2), the
-  update the `DisputeEnter`s extend.
+- a confiscation: `H = tagged_hash("deposits/fork-point", cosign_data)` of the disputed ledger's
+  update at the dispute's fork point, the lowest `last_valid_sequence` its `DisputeEnter`s name
+  (DEP-06 §Phase 2). `cosign_data` (DEP-02 §Signing) leaves out every signature, so every variant of
+  that update gives the same `H`. Its chain hash would not do: replicas hold the tip with different
+  cosignature sets, and the fork point is a tip (regtest 2026-10-21: one disputant's `DisputeEnter`
+  extended another variant of the fork-point update than the proposer's, and it never recognised the
+  confiscation).
 
 The anchor is what a spend is judged by: a vault spend without one is theft on its face, and one with
 one names the single place in the ledger that must answer for it (DEP-06 §Spend challenge). It also
@@ -465,7 +469,7 @@ The transaction is version 2, nLockTime the tier's CLTV; input 0 the vault and i
 swept migration outputs (DEP-06 §Confiscation obligations), each at nSequence `0xfffffffd` and
 each spent through the same tier (a signer returns one signature per input). Output 0 is the
 lottery output, then the operator's change (respectful), then the obligation splice-outs, then the
-anchor (`OP_RETURN <chain hash at the fork point>`). With
+anchor (`OP_RETURN <the fork point's anchor>`, §"On-Chain State Anchor"). With
 obligations the lottery value is: punitive, `inputs − fee − Σ splice-outs`; respectful,
 `max(obligations + residue, 330)` (the ledger's obligations plus the owed entries not spliced out).
 Cosigners MUST refuse a proposal that differs in any byte from the one they build. A confiscation

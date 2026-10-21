@@ -149,8 +149,8 @@ Challenge Answer events, Kind 9112), in any order and on any fork:
    §Lifecycle, reaches the threshold of the tier that mirrors it). The txid commits to the whole spend, so nothing about it is rebuilt here;
    whether that `QuorumBegin` itself conforms is judged as for any update (`NonConformingUpdate`,
    `NonConformingCosignature`), not as a vault spend.
-2. **A confiscation**: the spend is an authorised confiscation (below) whose anchor is the chain hash
-   at its dispute's fork point.
+2. **A confiscation**: the spend is an authorised confiscation (below), whose anchor is its dispute's
+   fork-point anchor (DEP-03 §On-Chain State Anchor).
 
 A spend with an answer is excused. A spend without an anchor is proven at once (unanchored form). For
 an anchored spend without an answer, the judge does not prove anything. It records a challenge: it
@@ -176,7 +176,7 @@ names it (DEP-03 §Rotation ordering), and a confiscation only as the byte-ident
 dispute it holds. Whoever signed an authorised spend therefore holds its answer, and the window gives
 it `w` blocks to publish one that is already on the relay.
 
-**Authorised confiscation.** A spend of the vault is a confiscation, and excused, iff it is byte-identical (without its witnesses) to the confiscation the rules build from public state: the ledger's history (its operator's chain by hash links from the `LedgerOpen` that derives its id), the public `DisputeArmed` updates on the disputants' forks, the DEP-03 eligibility cut as of the spend's block (arms above it do not count), the confiscation obligations, the fee rule, the anchor (the chain hash at the fork point), the shape the dispute's grounds give (respectful iff every `DisputeEnter` is for a lapsed quorum), and the tier its nLockTime names (a confiscation tier, never the tie-breaker). Its lottery may be over the set the cut yields for any subset of the arms, a proposer having seen fewer late arms, with that subset's snapshot for the obligations. Anything else, a lottery the cut never yields, another amount or an extra output, is not a confiscation answer. Nothing is excused because the verifier built, cosigned or saw it, and a verifier that missed the dispute rebuilds it from the relay and reaches the same verdict. Vector: `authorised_confiscation.txt`.
+**Authorised confiscation.** A spend of the vault is a confiscation, and excused, iff it is byte-identical (without its witnesses) to the confiscation the rules build from public state: the ledger's history (its operator's chain by hash links from the `LedgerOpen` that derives its id), the public `DisputeArmed` updates on the disputants' forks, the DEP-03 eligibility cut as of the spend's block (arms above it do not count), the confiscation obligations, the fee rule, the anchor (the fork point's, DEP-03 §On-Chain State Anchor), the shape the dispute's grounds give (respectful iff every `DisputeEnter` is for a lapsed quorum), and the tier its nLockTime names (a confiscation tier, never the tie-breaker). Its lottery may be over the set the cut yields for any subset of the arms, a proposer having seen fewer late arms, with that subset's snapshot for the obligations. Anything else, a lottery the cut never yields, another amount or an extra output, is not a confiscation answer. Nothing is excused because the verifier built, cosigned or saw it, and a verifier that missed the dispute rebuilds it from the relay and reaches the same verdict. Vector: `authorised_confiscation.txt`.
 
 ## Embedding
 
