@@ -12,7 +12,9 @@ a trust policy naming whose endorsements it accepts and what seating it requires
 whose new quorum does not satisfy a deposit's policy MUST splice that deposit out. Breaking the
 rule is an ordinary `NonConforming` update, provable without reference to any enclave. When an
 attestation class is broken, its seats stop counting for every policy, and the protocol falls
-back to the collateral economics it already has (DEP-05, DEP-19).
+back to the collateral economics it already has (DEP-05, DEP-19). A quorum MAY also record an
+image policy that its attested signers enforce on every later seat, so an attested quorum stays
+attested across rotations without trusting its operator.
 
 ## Motivation
 
@@ -49,6 +51,9 @@ else (ledger validation, relays, fees, UI) and is untrusted by this DEP. The sig
    has cosigned and that satisfies §4 for every carried deposit, or (b) a confiscation backed by a
    valid DEP-06 proof.
 3. Verify header proof-of-work for every chain fact the above relies on.
+4. Never cosign a `QuorumBegin` whose seats do not satisfy the quorum image policy in force (§7):
+   the signer checks every other seat's quote itself, so an operator cannot swap an unapproved key
+   into a quorum by editing the node.
 
 Node upgrades never change the signer's measurement. The signer is small enough to be specified
 here and implemented identically, or shared, across implementations.
@@ -59,6 +64,20 @@ An operator or member has a long-lived **identity key** (ads, ledger identity) a
 **vault key** held by its signer. The identity key signs, in the DEP-04 ad, a binding
 `(epoch vault pubkey, attestation quote, image measurement)`. A signer upgrade replaces only the
 epoch key, at rotation.
+
+The quote binds the keys through its report data, so it cannot be moved to another key:
+
+    binding = SHA256("DEP-21/seat" ‖ identity pubkey(32) ‖ epoch vault pubkey(32))
+    report_data(64) = binding(32) ‖ 0x00 × 32
+
+The report data goes in SEV-SNP's `REPORT_DATA`, TDX's `REPORTDATA`, or a Nitro attestation's
+`user_data`. The second half is reserved and MUST be zero. A quote is valid for a seat when its
+signature chain verifies to the vendor root, it is not a debug guest, and its report data equals the
+seat's binding.
+
+Certificate validity windows and TCB status are not judged at verification time; doing so would
+make conformance depend on the judge's clock. They are handled by revocation (§6). The measurement
+is taken from the quote itself: SNP `MEASUREMENT`, TDX `MRTD`, Nitro `PCR0`, all 48 bytes.
 
 ### 3. Images change only at rotation
 
@@ -126,6 +145,49 @@ The consequence is automatic containment: at the next rotation of every ledger r
 demoted class, deposits whose policies are no longer met splice out. A depositor's choice never
 silently carries over to an image or a class it did not accept.
 
+### 7. Quorum image policy
+
+§4 lets a depositor decide which quorums to trust. This section lets a quorum decide which seats it
+will admit, enforced by the attested signers themselves (§1 item 4).
+
+`QuorumBegin` MAY carry `image_policy` (type 332, variable):
+
+| Field | Content |
+|---|---|
+| `roots` | `u8 n ‖ n × root pubkey(32)` |
+| `k` | `u8`: endorsements required per measurement |
+| `pinned` | `u8 m ‖ m × measurement(48)`: measurements admitted without endorsement |
+| `max_per_platform` | `u8` (suggested 1) |
+| `max_per_vendor` | `u8` (suggested 3) |
+| `max_per_source` | `u8` (suggested ⌈n/2⌉ − 1, i.e. 3 of 7) |
+
+A measurement is **approved** when it is pinned, or when ≥ `k` of `roots` endorse it (kind 39106,
+§3). Every seat of the next quorum MUST carry a valid quote (§2) for an approved measurement, and
+the seats MUST respect the three caps. `max_per_source` counts seats whose endorsements name the
+same `source`, so different builds of one codebase count together. A `QuorumBegin` that breaks the
+policy recorded in the previous `QuorumBegin` is `NonConforming` (DEP-19 §5). That is checkable
+from the ledger, the quotes and the endorsement events, without trusting any enclave.
+
+**Changing the policy.** A `QuorumBegin` may carry a different `image_policy`, but its seats MUST
+satisfy both the old policy and the new one. A policy can only be loosened after the seats that
+adopt it were admitted under the stricter one, and every change is visible on the ledger a full
+epoch before it governs anything. Deposits whose §4 policy the change would break splice out at
+that rotation, as usual.
+
+**Same image as me.** The degenerate policy pins one measurement, `pinned = {self}` with no roots:
+a node only talks to keys running exactly its own image. It is valid, but it is a monoculture, and
+an upgrade becomes a flag day that must re-pin through a policy change. The intended use is roots
+endorsing a set that holds at least two independent implementations. The `max_per_source` cap then
+keeps a bug in one codebase from supplying the majority a theft needs.
+
+**What this buys and what it does not.** With every seat on an approved image and the caps met, a
+theft needs a majority of signers to run modified code, or a class break beyond the counting bound
+(§6). Neither can be done by an operator. Attestation proves which code runs, not that the code is
+correct: a bug in an approved image runs faithfully on every seat that uses it. What remains to an
+attacker is input from outside the quorum (depositors, relays, chain data, migrating ledgers,
+non-member proofs) and bugs in approved images. Implementation diversity and `max_per_source` are the
+defence against both, so this DEP does not replace audits of the signer.
+
 ## Rationale
 
 - **Per-deposit consent replaces a notice period.** No waiting time to calibrate, and no reliance
@@ -136,6 +198,9 @@ silently carries over to an image or a class it did not accept.
 - **Degradation, not failure.** A broken class is repriced, and the collateral regime remains.
   Size R for the tolerance wanted after the worst planned break (§2i).
 - **No griefing.** Exits pay their own way, so a policy cannot be used to impose cost on an operator.
+- **The signers police the seating.** A ledger rule alone only lets a bad seating be proven after
+  the fact. An attested signer that checks its peers' quotes refuses to create the bad seating at
+  all, and the ledger rule (§7) still catches a quorum whose signers were broken.
 - **Zero-day response and opt-out are one mechanism.** Demotion makes the next rotation splice out
   every deposit whose guarantee depended on the broken class.
 
@@ -149,9 +214,23 @@ silently carries over to an image or a class it did not accept.
   fast demoted quorums re-seat.
 - **Supply.** Policies with strict caps need seven distinct attestable platforms across at least three
   vendors per quorum.
+- **Source diversity.** `max_per_source = 3` of 7 needs at least three independent sources per
+  quorum (3 + 3 + 1). Two implementations exist today (cl-deposits and the Rust reference), so the
+  suggested cap is a target. Until a third exists, policies can set `max_per_source = 4` at the cost
+  of one codebase being able to supply a majority. The signer of §1 is a separate source from the
+  node; if it is shared, its diversity is one.
 - **Root compromise** is a class break of its own; k-of-n roots handle it as platform diversity does.
 - **Liveness is unchanged.** Censorship, co-sign refusal and going offline rest on collateral and
   dereliction as before.
+
+## Implementation notes (non-normative)
+
+- A modus image boots as an SEV-SNP guest and can request a report binding 64 bytes of report data.
+  Its Nitro path produces attestation documents with `user_data`. Either can be the signer of §1.
+- cl-sev-snp (github.com/modus-lisp/cl-sev-snp) verifies SNP reports against the AMD chain and Nitro
+  documents against the pinned AWS root, in pure Common Lisp. That is enough to check §2 quotes in
+  the cl implementation without FFI. The Rust reference needs an equivalent before the shared
+  vectors this DEP will need (a quote, its binding, its measurement, accept/reject) can be pinned.
 
 ## Related DEPs
 
@@ -165,8 +244,12 @@ migration, fees).
 2. Whether members, not only the operator, must satisfy a deposit's policy (this draft: every seat).
 3. How a wallet discovers satisfying ledgers cheaply (an ad field summarising seat classes and
    endorsements).
-4. Attestation formats per vendor (TDX, SEV-SNP, CCA, Nitro) and how `seat_classes` is derived
-   from the quote rather than declared.
+4. How `seat_classes` is derived from the quote rather than declared: vendor from the root the chain
+   ends at, platform from the chip certificate (SNP product, TDX FMSPC). For Nitro, what counts as a
+   platform is open. CCA quote binding is not yet specified.
 5. What a deposit below the dust floor is owed if no satisfying ledger will take it: held
    indefinitely, or released from its policy after some number of rotations.
-6. A shared signer implementation or two independent ones (independence is a class axis of its own).
+6. Whether a seat's `source` should come from the endorsement or from a field the quote itself
+   attests (for example SNP `HOST_DATA` or a Nitro PCR), so that `max_per_source` cannot be gamed by
+   endorsing one codebase under two names.
+7. A shared signer implementation or two independent ones (independence is a class axis of its own).
