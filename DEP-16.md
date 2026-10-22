@@ -117,7 +117,7 @@ proof obligations are discharged by lookup. there is no branch-selector data and
 
 ## operations
 
-every action against a deposit is an operation. each has a canonical encoding under which signatures are computed; the encoding commits to the deposit id, the operation type, the canonical serialization of arguments, a per-deposit monotonically increasing nonce, and an expiry block height. signatures are not replayable across deposits, operation types, or nonces, and become invalid after expiry.
+every action against a deposit is an operation. each has a canonical encoding under which signatures are computed; the encoding commits to the deposit id, the operation type, the canonical serialization of arguments, a per-deposit nonce, unique among the deposit's unexpired operations (dep-17 §nonce and expiry), and an expiry block height. signatures are not replayable across deposits, operation types, or nonces, and become invalid after expiry.
 
 v1 operation types: `spend` carries `destination`, `amount`, `completion_script`, `timeout`, `fee`. `accept` carries `source`, `amount`, `conditions`. `insert` carries `path`, `subtree`. `replace` carries `path`, `subtree`. `delete` carries `path`. `update_metadata` carries `field`, `new_value`.
 

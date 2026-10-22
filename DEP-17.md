@@ -175,10 +175,22 @@ this is dep-16's `Operation::signing_message` (more precisely, its digest): `pk(
 
 `nonce` and `expiry` are replay protection enforced by the **protocol**, not by the descriptor's predicates:
 
-- the protocol maintains a per-deposit nonce and rejects an operation whose nonce is not strictly greater than the last accepted one (the exact monotonicity rule is the deposit dep's; this dep only fixes that the nonce is the 8 bytes above).
-- the protocol rejects an operation once the current height exceeds `expiry`.
+- **expiry.** an operation is non-conforming when its `expiry` is below the `block_height` of the update that carries it.
+- **uniqueness within the window.** each deposit keeps the `(nonce, expiry)` pairs of the signature-bearing operations it has accepted. an operation is non-conforming when its `nonce` equals the nonce of an accepted operation on the same deposit whose `expiry` is at or above the carrying update's `block_height`. once that earlier operation's expiry has passed, its nonce is free again: the earlier signature can no longer be replayed, because the expiry rule already rejects it.
+
+the deposit is the one the operation is signed for: `deposit_id`, or `source_deposit_id` for a `TransferLock`. the rule covers every operation a depositor signs: `InvoiceLock`, `OnchainLock`, `TransferLock`, `DepositKeyRotate`, `ExitRequest` and `ExitCancel`. both checks are judged at the carrying update's own `block_height`, never a judge's tip, so every verifier reaches the same verdict.
 
 both checks sit outside the evaluator: the descriptor authorizes the operation's *content*, while nonce and expiry bound *when and how often* a given signature can be used. an evaluator therefore does not read them, and they are not part of the dep-16 predicate or value vocabulary. (a future dep may expose `nonce`/`expiry` as state values if a use case needs to gate on them; this dep only fixes their position in the preimage.)
+
+**why not monotonic.** a nonce need not be greater than the last one accepted. a wallet running on several devices would otherwise need a shared counter, and two devices signing at once would refuse each other. uniqueness within the window is all that replay protection needs: a signature replayed while its expiry is live meets its own nonce, and one replayed later meets its own expiry. a wallet picks nonces at random or from a clock; a lower nonce than the last is fine.
+
+**duplicate delivery.** a request can reach the operator more than once: a relay redelivers it, or the wallet retries a request whose answer it missed. when a request carries an operation whose nonce matches an accepted operation on the same deposit, still within that operation's expiry, the operator compares the two operations' sighashes (above).
+
+- **same sighash.** this is the operation already accepted, delivered again. the operator MUST NOT append it a second time and MUST NOT answer with an error. it answers with the original result: the same response the original request received, with ids and amounts taken from the committed operation. where the result is only known later, as for an outbound Lightning payment still in flight, it gives the answer the original would give now (succeeded with the preimage, failed, or still pending).
+- **different sighash.** a different operation reuses the nonce. the operator rejects it, as the uniqueness rule above requires.
+
+(signet soak, 2026-10-21: an operator received one `transfer_lock` request twice, 170 ms apart. It committed the first and answered the second "nonce already accepted". The wallet read the second answer and recorded a committed transfer as failed. Vector: `nonce_delivery.json`.)
+
 
 ## state-snapshot encoding
 

@@ -121,6 +121,8 @@ Wallets send ephemeral Kind 20101 events to operator relays. The content is JSON
 }
 ```
 
+A request delivered twice, or retried, carrying an operation the operator has already accepted gets the original result, not an error (DEP-17 §duplicate delivery).
+
 ## Advertisements (Kind 39100)
 
 Operators publish NIP-33 replaceable events advertising their terms. The `d` tag is the ledger_id, ensuring only the latest advertisement per ledger is retained. Content includes:
