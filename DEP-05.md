@@ -176,6 +176,11 @@ Quorum members must maintain a full state replica of any ledger they co-sign for
 A dispute counts in every state it reaches (open, armed, yielded or acquired). A `quorum_expired`
 dispute does **not** freeze co-signing: it is respectful, and the operator's re-establishment
 (`QuorumBegin`, DEP-05 §Lifecycle) is exactly the update its members must still be able to sign.
+A dispute is a `quorum_expired` dispute whenever its ground is the quorum's expiry, however the
+member came to it: from its own expiry watch, or from a `QuorumExpired` proof (DEP-06) it received.
+Its `DisputeEnter` carries reason `quorum_expired`, never a generic reason a peer would count as
+freezing. (Signet soak, 2026-10-23: reference members disputed two expired cl ledgers on a received
+`QuorumExpired` proof with the reason `auto_dispute`, froze, and the ledgers could never rotate.)
 Implementations agree on the cases in the shared vector `cosign_refusal.json`.
 
 If any check fails, the member MUST refuse to co-sign. The chain continuity check (1) is the primary defense against parallel chains — if the operator has published a non-conforming update that the member rejected, subsequent updates will have a different `previous_hash` and the member will refuse.
