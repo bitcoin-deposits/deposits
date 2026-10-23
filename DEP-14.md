@@ -110,39 +110,74 @@ The response is correlated with the request via the gift-wrap envelope's outer `
 
 Specified in DEP-15. Unlike Kind 25500, ringsig events are not gift-wrapped: the bound pubkey is the *purpose* of the event and is signed in the clear.
 
-### Kind 55502 — Attestation (durable, replaceable)
+### Kind 55502 — Attestation (durable)
 
 The persistent record. Published by the verifier on the durable ledgers relay; consumed by the operator's `check_attestation` (see below).
+
+Kind 55502 is a regular event, outside both replaceable ranges of NIP-01, so relays keep every attestation a verifier publishes. That is intended: an attestation is never overwritten. A verifier withdraws one by publishing a revocation (see "Revocation"), and a correction is a new attestation.
 
 ```json
 {
   "kind": 55502,
   "pubkey": "<verifier xonly>",
   "tags": [
-    ["p", "<subject xonly>"],          // the npub being attested for
-    ["d", "<subject xonly>:<method>"]  // recommended uniqueness key
+    ["p", "<subject xonly>"]           // the npub being attested for
   ],
   "content": "{...AttestationContent...}",
   "sig": "<verifier BIP-340 sig>"
 }
 ```
 
-The `#p` tag is the index operators query on. The recommended `#d` tag combines subject and method so a subject can hold concurrent attestations for multiple methods without one replacing another.
+The `#p` tag is the index operators query on. A subject may hold any number of attestations, for the same or different methods; none replaces another.
 
 `AttestationContent`:
 
 ```json
 {
   "npub": "<subject xonly>",
-  "method": "nip05" | "challenge" | "proclaim" | "ringsig",
+  "method": "nip05" | "challenge" | "proclaim" | "ringsig" | "revoked",
   "verified_at": "<ISO-8601 timestamp>",
   "lightning_address": "user@domain",   // nip05 / challenge only
   "allowlist_npub": "<xonly hex>",      // proclaim only
-  "nullifier": "<32-byte hex>"          // ringsig only, diagnostic
+  "nullifier": "<32-byte hex>",         // ringsig only, diagnostic
+  "revokes": "<event id hex>",           // revoked only
+  "reason": "..."                        // revoked only, optional
 }
 ```
 
-A consumer MUST verify the event signature against the configured verifier xonly, MUST confirm the `#p` tag matches the subject of interest, MAY consult `verified_at` for staleness checks, and MUST dispatch on `method` to apply the matching access-control rule.
+A consumer MUST verify the event signature against the configured verifier xonly, MUST confirm the `#p` tag matches the subject of interest, MUST disregard any attestation the same verifier has revoked (see "Revocation"), and MUST dispatch on `method` to apply the matching access-control rule.
+
+### Revocation
+
+A verifier withdraws an attestation by publishing another Kind 55502 event with `method: "revoked"`, the same `#p` subject, and an `#e` tag naming the attestation it withdraws:
+
+```json
+{
+  "kind": 55502,
+  "pubkey": "<verifier xonly>",
+  "tags": [
+    ["p", "<subject xonly>"],
+    ["e", "<id of the attestation being revoked>"]
+  ],
+  "content": "{\"npub\": \"<subject xonly>\", \"method\": \"revoked\", \"revokes\": \"<same id>\", \"verified_at\": \"...\"}",
+  "sig": "<verifier BIP-340 sig>"
+}
+```
+
+Revocation is terminal. A consumer that has seen a valid revocation, signed by the attestation's own verifier, MUST treat the revoked attestation as void, whatever either event's `created_at` or `verified_at` says. A revocation cannot itself be revoked; to restore access, the verifier issues a new attestation.
+
+Ordering comes from the reference, never from timestamps. A revocation names exactly the event it voids, so it does not matter which was published first or what dates either carries. Because the operator's single query on `#p` returns attestations and revocations together, no second lookup is needed.
+
+### Time
+
+`created_at` and `verified_at` are values the verifier chose. A consumer MUST NOT treat them as evidence of when anything happened, and MUST NOT use them to order attestations or to decide between an attestation and its revocation. They are informational: useful in logs and to a human, not to policy.
+
+Nostr has no trusted clock, and depending on one would reintroduce the central party this protocol avoids. Where a deployment genuinely needs a bound in time, it anchors to Bitcoin instead of trusting a date:
+
+- **Not before.** A verifier MAY add `["block", "<height>", "<block hash>"]` naming a recent block. The attestation cannot have been made before that block existed.
+- **Not after.** A verifier or anyone else MAY timestamp the attestation's id with OpenTimestamps (NIP-03). The attestation existed by the block the proof commits to.
+
+A consumer that relies on either MUST verify it against its own view of the chain.
 
 ## Operator-Side Consumption
 
@@ -159,6 +194,8 @@ On each `deposit_open` request the operator computes the *effective sender* (sub
    - `method = "nip05"` or `"challenge"` and `lightning_address`'s domain ∈ `deposit_domain_allowlist` ⇒ accept.
    - `method = "proclaim"` and `allowlist_npub` ∈ `deposit_allowlist` ⇒ accept.
    - `method = "ringsig"` ⇒ accept (anonymity-set membership is the criterion; the operator trusts the verifier's signature).
+
+   Before accepting, discard every attestation whose id appears in the `#e` tag of a `method = "revoked"` event from the same verifier in the same result set.
 3. No matching attestation ⇒ reject with `code: "not_authorized"`. The reject MAY carry `attestation_required: true` to nudge the wallet to initiate verification.
 
 The operator MUST NOT re-verify the cryptographic content of an attestation beyond the BIP-340 signature on the Kind 55502 event itself. The verifier is the trust anchor by configuration; second-guessing its decisions defeats the abstraction.
@@ -180,13 +217,15 @@ The reference verifier reads its configuration from environment variables (and `
 | `VERIFY_ALLOWLIST_FILE` | Path to the allowlist consulted by `proclaim` |
 | `VERIFY_CA_CERT` | Optional custom CA bundle for HTTPS probes |
 
-A verifier MAY support additional methods or configuration; it MUST NOT issue an attestation whose `method` field is not specified in this DEP or a successor.
+A verifier MAY support additional methods or configuration; it MUST NOT issue an attestation whose `method` field is not specified in this DEP or a successor. A consumer MUST ignore any `method` it does not recognise, except `revoked`, which every consumer MUST honour.
 
 ## Security Considerations
 
 **Verifier trust.** The verifier is fully trusted by every operator who configures it. A compromised verifier can issue attestations for any subject, bypassing access control on every operator that trusts it. Operators SHOULD review the verifier's behavior and SHOULD treat verifier compromise the way they treat root CA compromise.
 
-**Attestation longevity.** Kind 55502 events persist on the durable relay until garbage-collected by the operator's relay policy. An attestation issued today and trusted today might still be on-relay months later. Verifiers SHOULD consider issuing short-lived attestations (small `verified_at`-relative TTL embedded in policy) or rotating their signing key to bound exposure.
+**Attestation longevity.** Kind 55502 events persist on the durable relay until garbage-collected by the operator's relay policy. An attestation issued today and trusted today might still be on-relay months later. A verifier bounds that exposure by revoking attestations it no longer stands behind, or by rotating its signing key. A lifetime written into the attestation (a `verified_at`-relative TTL) does not bound it: the verifier chooses that date, and so can anyone who obtains the verifier's key.
+
+**Verifier key compromise and revocation.** Whoever holds the verifier's key can issue attestations; they cannot undo a revocation. That is why revocation is terminal and keyed on event ids rather than on timestamps: a later-dated re-issue of a revoked attestation is a different event, and it is that new event, not a resurrection of the old one, that the operator must decide whether to trust. Operators who suspect the key SHOULD stop trusting the verifier, not wait for a revocation.
 
 **Domain-allowlist scope.** A `nip05` or `challenge` attestation only proves control of a *specific* lightning address. An operator that allowlists `example.com` must trust that *every* `*@example.com` is appropriate to onboard. This is the same trust assumption as TLS certificate authority: scope the allowlist to domains whose user-vetting policy you trust.
 
