@@ -164,6 +164,8 @@ A verifier withdraws an attestation by publishing another Kind 55502 event with 
 }
 ```
 
+The content's `revokes` MUST equal the `#e` tag. A revocation with no `#e` tag, more than one, or a `revokes` that differs from it is malformed, and a consumer MUST ignore it, so one event can't say two different things.
+
 Revocation is terminal. A consumer that has seen a valid revocation, signed by the attestation's own verifier, MUST treat the revoked attestation as void, whatever either event's `created_at` or `verified_at` says. A revocation cannot itself be revoked; to restore access, the verifier issues a new attestation.
 
 Ordering comes from the reference, never from timestamps. A revocation names exactly the event it voids, so it does not matter which was published first or what dates either carries. Because the operator's single query on `#p` returns attestations and revocations together, no second lookup is needed.
@@ -195,7 +197,7 @@ On each `deposit_open` request the operator computes the *effective sender* (sub
    - `method = "proclaim"` and `allowlist_npub` ∈ `deposit_allowlist` ⇒ accept.
    - `method = "ringsig"` ⇒ accept (anonymity-set membership is the criterion; the operator trusts the verifier's signature).
 
-   Before accepting, discard every attestation whose id appears in the `#e` tag of a `method = "revoked"` event from the same verifier in the same result set.
+   Before accepting, discard every attestation whose id appears in the `#e` tag of a well-formed `method = "revoked"` event (one `#e` tag, equal to `revokes`) from the same verifier in the same result set.
 3. No matching attestation ⇒ reject with `code: "not_authorized"`. The reject MAY carry `attestation_required: true` to nudge the wallet to initiate verification.
 
 The operator MUST NOT re-verify the cryptographic content of an attestation beyond the BIP-340 signature on the Kind 55502 event itself. The verifier is the trust anchor by configuration; second-guessing its decisions defeats the abstraction.
@@ -226,6 +228,10 @@ A verifier MAY support additional methods or configuration; it MUST NOT issue an
 **Attestation longevity.** Kind 55502 events persist on the durable relay until garbage-collected by the operator's relay policy. An attestation issued today and trusted today might still be on-relay months later. A verifier bounds that exposure by revoking attestations it no longer stands behind, or by rotating its signing key. A lifetime written into the attestation (a `verified_at`-relative TTL) does not bound it: the verifier chooses that date, and so can anyone who obtains the verifier's key.
 
 **Verifier key compromise and revocation.** Whoever holds the verifier's key can issue attestations; they cannot undo a revocation. That is why revocation is terminal and keyed on event ids rather than on timestamps: a later-dated re-issue of a revoked attestation is a different event, and it is that new event, not a resurrection of the old one, that the operator must decide whether to trust. Operators who suspect the key SHOULD stop trusting the verifier, not wait for a revocation.
+
+The same property cuts the other way: whoever holds a stolen verifier key can revoke every attestation that key ever issued, permanently. That is a denial of service, not an escalation, and the only remedy is new attestations under a new key.
+
+**Withheld revocations.** The operator learns of a revocation only from the relays it queries. A relay that drops or withholds the revocation leaves the attestation standing. This is within the trust the operator already places in its verifier and relays, but operators who care SHOULD query more than one relay for the `#p` result set, and verifiers SHOULD publish revocations to every relay they publish attestations to.
 
 **Domain-allowlist scope.** A `nip05` or `challenge` attestation only proves control of a *specific* lightning address. An operator that allowlists `example.com` must trust that *every* `*@example.com` is appropriate to onboard. This is the same trust assumption as TLS certificate authority: scope the allowlist to domains whose user-vetting policy you trust.
 
