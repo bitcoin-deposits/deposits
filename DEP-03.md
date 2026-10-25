@@ -259,7 +259,7 @@ participants revealed. The full construction is DEP-06 §Lottery; this section s
    confiscation transaction spending the disputed reserves UTXO into the **lottery output**, built
    for the k eligible participants.
 3. Each participant publishes its preimage (`CustodyLotteryReveal`, Kind 9106) within 72 blocks of
-   the confiscation's confirmation.
+   the confiscation's confirmation (whichever rung confirmed, §"Confiscation ladder").
 4. If all revealed, the winner `(Σ contribution) mod k` claims through the full-set leaf. Otherwise,
    after 72 blocks, the winner over the revealers R, `(Σ_{R} contribution) mod |R|`, claims through
    R's subset leaf with the recovery voters' attestation.
@@ -472,8 +472,57 @@ lottery output, then the operator's change (respectful), then the obligation spl
 anchor (`OP_RETURN <the fork point's anchor>`, §"On-Chain State Anchor"). With
 obligations the lottery value is: punitive, `inputs − fee − Σ splice-outs`; respectful,
 `max(obligations + residue, 330)` (the ledger's obligations plus the owed entries not spliced out).
-Cosigners MUST refuse a proposal that differs in any byte from the one they build. A confiscation
-is a single transaction at this fee, not a ladder (DEP-06 §Limits).
+Cosigners MUST refuse a proposal that differs in any byte from the one they build. That
+transaction is rung 0 of the confiscation's fee ladder (below).
+
+### Confiscation ladder
+
+A confiscation is signed at `k = 4` fees, so a stuck one can be bumped by replacement (BIP-125)
+without signing anything new, as a rotation is (§"Fee ladder"):
+
+    rung i (i = 0 … 3):   fee_i = 2^i × confiscation_fee        Δ_i = fee_i − fee_0
+
+Every rung has rung 0's inputs, nLockTime, nSequences and outputs, the anchor included, except one
+output, which pays `Δ_i` less: in the punitive shape output 0, the lottery; in the respectful shape
+output 1, the operator's change. The swept inputs and the obligation splice-outs are the same in
+every rung, so depositors never pay a higher rung's fee, and the respectful lottery output keeps
+`max(obligations + residue, 330)`. Rungs share one vsize, so each pays twice its predecessor's fee
+and feerate and is a valid replacement of the one below (the argument of §"Fee ladder", with
+`feerate ≥ 1`).
+
+The shape is rung 0's (punitive or respectful, after the collapse to punitive when the change is
+below 294 sats). Rung i > 0 exists only while it keeps rung 0's outputs, the output that pays for it
+stays at or above its floor (330 sats for the lottery, 294 for the change), and
+`1000 × Δ_i ≤ collateral_amount` of the governing `QuorumBegin` (the one that created the confiscated
+vault, whose `reference_feerate_sat_vb` sets the fee): the ladder stops at the first rung that fails. The extra fee is the slashed operator's, never the depositors'.
+
+**Which rung confirmed.** Only one can, since all spend the vault. The confiscation is the rung
+whose output 0 exists on the chain (unspent, or spent by a later confirmed transaction), and every
+later step uses it: the reveal deadline counts from its confirmation, the lottery claim and every
+recovery spend spend its output 0 at its value, the recovery voters attest a claim on it, and a
+`DisputeAcquire`'s `confiscation_txid`, a `MigrationCredit`'s `confiscation_tx` and proof 11's
+`confiscation_tx` name it. None of these is signed before the confiscation confirms (a claim waits
+for the reveals, DEP-06 Phase 3–4), so nothing is signed per rung but the confiscation itself.
+
+**Signing.** A recovery voter signs a confiscation only for a dispute it holds (its own
+`DisputeEnter`), after the arm window closes, and only as the byte-identical rebuild (above). The
+`confiscation_sign` request carries every rung unsigned as `unsigned_rungs` (hex, rung order; rung 0
+is also `unsigned_tx`). A signer rebuilds the ladder and refuses unless every rung is byte for byte
+its rung i; it then answers one signature per rung for input 0 as `rung_signatures` (and, with swept
+inputs, one list per rung as `rung_sweep_signatures`), besides rung 0's `signature` and
+`sweep_signatures`. So every signature a voter gives is on a rung of the rebuild, which is exactly
+what answers a challenge of the spend (DEP-06 §Spend challenge).
+
+**Broadcast.** The proposer assembles every rung it has a threshold of signatures for, broadcasts
+rung 0, and keeps broadcasting while none has confirmed: rung `min(k − 1, ⌊(tip − h_c) / 6⌋)`, where
+`h_c = max(nLockTime, E)`, E the eligibility cut the rebuild used (§"Replacement collateral
+declaration"). Any holder of the assembled rungs does the same; every holder computes the same
+schedule (policy, not consensus). A proposer that disappears is replaced by any recovery voter
+proposing again: it rebuilds the same ladder.
+
+Vector: `confiscation_ladder.json` (every rung of punitive, respectful and obligations
+confiscations, ladders cut short by the collateral and by the change floor, a respectful shape
+collapsed at rung 0, decoys no ladder contains, and the claim of a higher rung).
 
 The lottery claim's fee is `claim_fee_floor` (above), so a participant's declared replacement
 collateral always covers it. Its shape is fixed too: version 2, nLockTime 0; input 0 the lottery

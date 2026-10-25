@@ -176,7 +176,7 @@ names it (DEP-03 §Rotation ordering), and a confiscation only as the byte-ident
 dispute it holds. Whoever signed an authorised spend therefore holds its answer, and the window gives
 it `w` blocks to publish one that is already on the relay.
 
-**Authorised confiscation.** A spend of the vault is a confiscation, and excused, iff it is byte-identical (without its witnesses) to the confiscation the rules build from public state: the ledger's history (its operator's chain by hash links from the `LedgerOpen` that derives its id), the public `DisputeArmed` updates on the disputants' forks, the DEP-03 eligibility cut as of the spend's block (arms above it do not count), the confiscation obligations, the fee rule, the anchor (the fork point's, DEP-03 §On-Chain State Anchor), the shape the dispute's grounds give (respectful iff every `DisputeEnter` is for a lapsed quorum), and the tier its nLockTime names (a confiscation tier, never the tie-breaker). Its lottery may be over the set the cut yields for any subset of the arms, a proposer having seen fewer late arms, with that subset's snapshot for the obligations. Anything else, a lottery the cut never yields, another amount or an extra output, is not a confiscation answer. Nothing is excused because the verifier built, cosigned or saw it, and a verifier that missed the dispute rebuilds it from the relay and reaches the same verdict. Vector: `authorised_confiscation.txt`.
+**Authorised confiscation.** A spend of the vault is a confiscation, and excused, iff it is byte-identical (without its witnesses) to a rung of the confiscation ladder (DEP-03 §Confiscation ladder) the rules build from public state: the ledger's history (its operator's chain by hash links from the `LedgerOpen` that derives its id), the public `DisputeArmed` updates on the disputants' forks, the DEP-03 eligibility cut as of the spend's block (arms above it do not count), the confiscation obligations, the fee rule, the anchor (the fork point's, DEP-03 §On-Chain State Anchor), the shape the dispute's grounds give (respectful iff every `DisputeEnter` is for a lapsed quorum), and the tier its nLockTime names (a confiscation tier, never the tie-breaker). Its lottery may be over the set the cut yields for any subset of the arms, a proposer having seen fewer late arms, with that subset's snapshot for the obligations. Anything else, a lottery the cut never yields, another amount or an extra output, is not a confiscation answer. Nothing is excused because the verifier built, cosigned or saw it, and a verifier that missed the dispute rebuilds it from the relay and reaches the same verdict. Vector: `authorised_confiscation.txt`.
 
 ## Embedding
 
@@ -298,7 +298,7 @@ depth d and the rest at d-1. At k = 7 that is 131 leaves, depth 8, a 289-byte co
 
 #### Phase 3: Reveal (CustodyLotteryReveal)
 
-Once the confiscation transaction confirms, each participant publishes a `CustodyLotteryReveal`
+Once a rung of the confiscation confirms (DEP-03 §Confiscation ladder), each participant publishes a `CustodyLotteryReveal`
 event (Nostr Kind 9106) carrying their preimage, within `LOTTERY_REVEAL_CSV = 72` blocks of the
 confiscation's confirmation (the reveal deadline). The signature on the reveal binds
 `(ledger_id, preimage)` to the participant's identity.
@@ -545,9 +545,6 @@ Wallets must not accept post-dispute updates until the on-chain claim transactio
   final (DEP-03 §Rotation ordering). A majority of the spent vault's members that then refuses
   leaves the rotation recorded but unspent; no proof reaches that, as none reaches a refusal to
   cosign.
-- **Stuck confiscations.** A confiscation is one transaction at the rule fee (DEP-03
-  §Confiscation fee), without a fee ladder. If it does not confirm, the vault's post-expiry tiers
-  eventually open. A confiscation ladder like the rotation's is the obvious extension.
 - **Answers need a relay.** A challenge lapses only if no answer reaches the judge in `w` blocks. A
   relay that censors answers for that long, while every honest holder of the answer is cut off from
   every relay the judge reads, convicts honest signers; a later answer still rebuts the proof for

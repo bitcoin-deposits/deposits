@@ -102,7 +102,7 @@ Wallets send ephemeral Kind 20101 events to operator relays. The content is JSON
 | partner_add | Add quorum member | DEP-05 |
 | partner_join | Record quorum join | DEP-05 |
 | request_route | Request cross-ledger route from courier | DEP-13 |
-| confiscation_sign | Request co-signature on a confiscation TX (dispute) | DEP-06 |
+| confiscation_sign | Request co-signatures on every rung of a confiscation (dispute): `unsigned_rungs`, answered by `rung_signatures` (DEP-03 §Confiscation ladder) | DEP-06 |
 | forfeit_sweep_sign | Request co-signature on a forfeit-sweep TX (arm-and-reveal forfeiture) | DEP-06 |
 | lottery_subset_attest | Request a recovery voter's signature on a revealer-subset lottery claim: params `unsigned_tx`, `sighash`, `subset` (participant pubkeys); the voter signs only the subset of reveals it observed, for that subset's winner | DEP-06 |
 | issue_hold_invoice | Ask a bridge for a hold invoice against a wallet-supplied hash | DEP-10 |
