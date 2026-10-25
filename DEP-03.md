@@ -515,10 +515,11 @@ what answers a challenge of the spend (DEP-06 §Spend challenge).
 
 **Broadcast.** The proposer assembles every rung it has a threshold of signatures for, broadcasts
 rung 0, and keeps broadcasting while none has confirmed: rung `min(k − 1, ⌊(tip − h_c) / 6⌋)`, where
-`h_c = max(nLockTime, E)`, E the eligibility cut the rebuild used (§"Replacement collateral
-declaration"). Any holder of the assembled rungs does the same; every holder computes the same
-schedule (policy, not consensus). A proposer that disappears is replaced by any recovery voter
-proposing again: it rebuilds the same ladder.
+`h_c` is the height at which it first broadcast the confiscation. Any holder of the assembled rungs
+does the same from its own first broadcast (policy, not consensus: no chain fact marks when a
+confiscation became possible, since the arm window, the cut and the tier can each be long past when
+the proposal is made). A proposer that disappears is replaced by any recovery voter proposing again:
+it rebuilds the same ladder.
 
 Vector: `confiscation_ladder.json` (every rung of punitive, respectful and obligations
 confiscations, ladders cut short by the collateral and by the change floor, a respectful shape
