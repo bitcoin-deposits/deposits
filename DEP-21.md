@@ -223,7 +223,7 @@ identity key. Any seat quote (§2) serves.
    The hash makes the second half unusable as a vault key: nobody knows a secret key for it.
 2. The old enclave verifies the quote and checks that Mᵢ₊₁ is approved under the image policy it
    enforces (§7). If so, it encrypts the identity secret to the transport key.
-3. The old enclave signs, with the identity key, a handoff event (Nostr kind 9108):
+3. The old enclave signs, with the identity key, a handoff event (Nostr kind 9113):
    `{identity, handoff_seq, from_measurement, to_measurement, transport_quote_hash}`.
    `handoff_seq` is one more than the previous handoff's, or 1 after genesis. The old enclave then
    erases the secret and refuses to sign anything further as that identity.
