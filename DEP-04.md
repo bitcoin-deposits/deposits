@@ -27,6 +27,10 @@ Wallets connect to both: operator relays for requests, ledger relays for reading
 | 9107 | Rotation Transaction | Durable | deposits-node | One signed rung of the rotation a `QuorumBegin` names: `{ledger_id, sequence, rung, tx}` (JSON, see DEP-03 §Rotation ordering, §Fee ladder) |
 | 9111 | Spend Challenge | Durable | deposits-node | A `QuorumChallenge` update, tagged `l` = the challenged (spent) ledger: `{challenged_ledger_id, txid, anchor, update}` (JSON; `update` the challenger's signed update, base64 TLV; DEP-06 §Spend challenge) |
 | 9112 | Challenge Answer | Durable | deposits-node | An answer to a spend challenge, tagged `l` = the spent ledger: `{challenged_ledger_id, txid, anchor, updates}` (JSON; `updates` the answering signed updates, base64 TLV; DEP-06 §Spend challenge) |
+| 9108 | Update Proposal | Durable | deposits-node | An operator's signed proposal of an update, before cosigning (DEP-19) |
+| 9109 | Cosign Refusal | Durable | deposits-node | A signed refusal over a proposal hash (DEP-19) |
+| 9113 | Identity Handoff | Durable | signer | An enclave-held identity moving to a new image (DEP-21 §8, draft) |
+| 9114 | Inactivity Attestation | Durable | deposits-node | `deposits/inactivity` attestations (DEP-19) |
 | 9106 | Custody Lottery Reveal | Durable | deposits-node | Disputant's preimage reveal during the on-chain lottery (JSON, see DEP-06 §Phase 3) |
 | 20101 | Request | Ephemeral | deposits-node, wallet | Wallet-to-operator request (JSON) |
 | 20102 | Response | Ephemeral | deposits-node | Operator-to-wallet response (JSON) |
@@ -39,6 +43,7 @@ Wallets connect to both: operator relays for requests, ledger relays for reading
 | 39101 | Price Oracle | Replaceable | deposits-node | BTC/USD price (JSON, NIP-33, `d`=`btcusd`) |
 | 39102 | Courier Advertisement | Replaceable | deposits-node | Cross-ledger routing capacity and fees (JSON, NIP-33, see DEP-13) |
 | 39104 | Bridge Advertisement | Replaceable | any deposit holder with an LN node | Lightning ↔ ledger bridging capacity and fees (JSON, NIP-33, see DEP-10) |
+| 39106 | Image Endorsement | Replaceable | trust root | A trust root's endorsement of a signer measurement (DEP-21 §3, draft) |
 
 ### Identity Verification (wallet ↔ lightning-verifier ↔ operator)
 

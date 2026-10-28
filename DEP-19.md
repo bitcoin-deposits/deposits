@@ -63,7 +63,7 @@ observes at height `≥ last_update.block_height + inactivity_blocks`. The
 `member_ledger_hash` binds the attestation into the web of causality exactly as a
 co-signature does (WP §time).
 
-Attestations are published as Kind 9107 events (`deposits/inactivity`, durable).
+Attestations are published as Kind 9114 events (`deposits/inactivity`, durable).
 
 ### 3. `QuorumInactive` fraud proof
 
@@ -331,7 +331,7 @@ cluster detectable, not impossible.
 | `anchor_members` | QuorumBegin | operator-declared |
 | `signer_block_height` | cosignature | — |
 | CosignRefusal kind | Nostr | 9109 |
-| Attestation kind | Nostr | 9107 |
+| Attestation kind | Nostr | 9114 |
 | `QuorumInactive` discriminant | FraudProofType | TBD |
 | `NonConforming` discriminant | FraudProofType, replaces two | TBD |
 
