@@ -183,6 +183,19 @@ freezing. (Signet soak, 2026-10-23: reference members disputed two expired cl le
 `QuorumExpired` proof with the reason `auto_dispute`, froze, and the ledgers could never rotate.)
 Implementations agree on the cases in the shared vector `cosign_refusal.json`.
 
+**The ground of a dispute.** A `DisputeEnter`'s `reason` names its ground: `quorum_expired`, or the
+DEP-06 proof type it rests on in snake_case (`non_conforming_update`, `equivocation`,
+`unauthorized_vault_spend`, ...). A member writes the ground, never a generic label. A record that
+carries a generic reason (`auto_dispute`, `fraud`, written before this rule) is judged by its
+ground as the record shows it: it is a `quorum_expired` dispute iff it carries an expiry anchor
+(`anchor_block_height`), or it cites no fraud proof (`fraud_proof_hash`) and its update's
+`block_height` is past the `quorum_expiry` of the `QuorumBegin` governing at its
+`last_valid_sequence`. Every rule here that asks whether a dispute is a `quorum_expired` dispute
+(freezing, ending on re-establishment) asks it of the ground, not the label. (Signet soak,
+2026-10-28: reference members' expiry disputes written as `auto_dispute` kept freezing ledgers
+after the label rule above was fixed, because the records were older than the fix.) Vector:
+`dispute_ground.json`.
+
 **When a `quorum_expired` dispute ends.** Its ground is the expiry of the `QuorumBegin` governing at
 its `last_valid_sequence`. Re-establishment answers exactly that ground: once the operator's chain
 holds a `QuorumBegin` after the dispute's `last_valid_sequence`, the dispute is over unless its
