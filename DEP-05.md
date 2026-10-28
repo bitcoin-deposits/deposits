@@ -183,6 +183,20 @@ freezing. (Signet soak, 2026-10-23: reference members disputed two expired cl le
 `QuorumExpired` proof with the reason `auto_dispute`, froze, and the ledgers could never rotate.)
 Implementations agree on the cases in the shared vector `cosign_refusal.json`.
 
+**When a `quorum_expired` dispute ends.** Its ground is the expiry of the `QuorumBegin` governing at
+its `last_valid_sequence`. Re-establishment answers exactly that ground: once the operator's chain
+holds a `QuorumBegin` after the dispute's `last_valid_sequence`, the dispute is over unless its
+confiscation already confirmed (DEP-06 §Race). Its disputant yields (`DisputeYield`) and releases
+its pledge. No member arms on it, and none signs a confiscation for it. This is judged from the
+ledger, not from the chain tip: the re-established quorum may itself have expired since, and that
+later expiry is a new ground, which takes a new `DisputeEnter` whose anchor is past the new
+`quorum_expiry`. A member MUST NOT let a live dispute on an earlier ground stand in for it.
+(Signet soak, 2026-10-27: cl members kept expiry disputes opened before their operators
+re-established, because they only stood down while the new quorum was live. When the new quorum
+expired too they opened no new dispute, and the reference members, rightly, refused to arm on an
+anchor older than the current expiry, so neither path could close the ledger.) Vector:
+`expiry_dispute_ends.json`.
+
 If any check fails, the member MUST refuse to co-sign. The chain continuity check (1) is the primary defense against parallel chains — if the operator has published a non-conforming update that the member rejected, subsequent updates will have a different `previous_hash` and the member will refuse.
 
 ### Cosignature Threshold
