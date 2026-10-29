@@ -89,6 +89,8 @@ Both live in the same Taproot output, controlled by the same quorum via tiered s
 
 ### Collateral floor
 
+*A rule of `anchor-ladder-v5`, judged under the ruleset the `QuorumBegin` names (DEP-18).*
+
 Collateral is a floor on the vault's split, not a cap on credits. Each member MAY require a
 minimum collateral share in its `QuorumAddMember` (`min_collateral_bps`, DEP-02 type 314); the
 quorum's floor is
@@ -250,7 +252,7 @@ Quorum membership duration is limited by `quorum_expiry` — the shortest member
 
 **Quorum expiry.** A `QuorumBegin`'s `quorum_expiry` MUST NOT exceed the shortest `membership_until` among the members it seats, as recorded in their `QuorumAddMember`s. Members that declared no `membership_until` impose no bound. The operator may shorten a member's commitment, never extend it. A `QuorumBegin` past the bound is non-conforming (`quorum_expiry_exceeds_commitment`), and every validator refuses it. An operator proposes `min(current_block + its own window, that bound)`. Its window is local policy; the suggested default is 4320 blocks. Vector: `quorum_expiry.json`. (Signet soak, 2026-10-24: the reference operator proposed `current_block + 4320` regardless of the members' commitments, so every rotation was refused and its ledgers ran into expiry. cl-deposits proposed the bound but did not check it as a validator.)
 
-**Born expired.** A `QuorumBegin` whose `quorum_expiry` is at or below its own `block_height` is non-conforming (`quorum_expiry_not_after_block`), and every validator refuses it: the quorum it seats would be past expiry from its first update, so the rotation buys nothing and spends the vault's fee. An operator whose members' commitments are at or below the current block collects fresh consents (new `QuorumAddMember`s with a later `membership_until`) before it rotates. Vector: `quorum_expiry.json` (cases `born_expired`, `expiry_at_block`). (Signet soak, 2026-10-28: a reference operator rotated at height 9341 to `quorum_expiry` 7181 from members' stale commitments, and immediately tried again.)
+**Born expired** (a rule of `anchor-ladder-v5`, judged under the ruleset the `QuorumBegin` names; DEP-18). A `QuorumBegin` whose `quorum_expiry` is at or below its own `block_height` is non-conforming (`quorum_expiry_not_after_block`), and every validator refuses it: the quorum it seats would be past expiry from its first update, so the rotation buys nothing and spends the vault's fee. An operator whose members' commitments are at or below the current block collects fresh consents (new `QuorumAddMember`s with a later `membership_until`) before it rotates. Vector: `quorum_expiry.json` (cases `born_expired`, `expiry_at_block`). (Signet soak, 2026-10-28: a reference operator rotated at height 9341 to `quorum_expiry` 7181 from members' stale commitments, and immediately tried again.)
 
 ### Lifecycle
 

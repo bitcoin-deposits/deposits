@@ -20,7 +20,7 @@ This document specifies fraud proof construction, embedding, broadcast, and veri
 
 6. **Winner collateral deviation**: the lottery winner's broadcast claim TX deviates from the replacement collateral they committed to in `DisputeArmed` — missing the second input, pointing at a different UTXO, committing less than declared, or adding change outputs that drain the pledged amount. Verifiable on-chain by inspecting the claim TX against the disputant's stored `DisputeArmed` declaration.
 
-7. **Unauthorised vault spend**: the reserves UTXO was spent by any script path (Tier 0–3) by a transaction that is neither a rotation named by a `QuorumBegin` nor an authorised confiscation. It is proven in one of two forms, never on a search that found nothing: **unanchored**, the spend carries no anchor (DEP-03 §On-Chain State Anchor), which no authorised spend lacks; or **lapsed**, the spend's anchor was challenged and no answer came within the ledger's service window (§Spend challenge). Every key whose signature appears in the witness is an accused; the proof is punitive and is presented on each accused's own ledgers.
+7. **Unauthorised vault spend** (a rule of `anchor-ladder-v5`, judged under the ruleset of the vault's governing `QuorumBegin`, DEP-18; a vault created under an earlier ruleset is never proven against): the reserves UTXO was spent by any script path (Tier 0–3) by a transaction that is neither a rotation named by a `QuorumBegin` nor an authorised confiscation. It is proven in one of two forms, never on a search that found nothing: **unanchored**, the spend carries no anchor (DEP-03 §On-Chain State Anchor), which no authorised spend lacks; or **lapsed**, the spend's anchor was challenged and no answer came within the ledger's service window (§Spend challenge). Every key whose signature appears in the witness is an accused; the proof is punitive and is presented on each accused's own ledgers.
 
 ## Proof Construction
 
@@ -134,6 +134,8 @@ where `spend_block_hash` is the 32 raw bytes of the confirming block. The proof 
 Vectors: `vault_spend_anchor.txt` (both forms, answers and decoys), `authorised_confiscation.txt`. A watcher keeps the previous vault watched too until a rung of its rotation confirms, and treats each theft as owed until its proofs are published to every ledger its signers operate: a relay error, a restart or a later advertisement must not silence it. The proof is self-evident and needs no embedding.
 
 ### Spend challenge
+
+*Only for a vault whose governing `QuorumBegin` names `anchor-ladder-v5` (DEP-18).*
 
 An anchored spend of a vault names, by its anchor `H`, the one place in the ledger that must answer
 for it. A judge (a watcher before it proves a spend, a verifier before it accepts a proof) looks for

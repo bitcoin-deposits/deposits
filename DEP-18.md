@@ -27,6 +27,66 @@ versions are **named, not ordered**. there is no epoch counter and no `>=` compa
 
 each ruleset declares a **reserves-cascade family** — the on-chain script shape it produces. two rulesets in the same family produce byte-identical reserves UTXOs and differ only in off-chain op rules. (`fee-cap-v3` is in the same family as `cltv-offset-v2`: same reserves script, plus the fee cap. `balance-commit-v4` is likewise in the `cltv-offset-v2` family: `fee-cap-v3`'s rules plus required balance commitments on balance-touching ops — see [dep-02](DEP-02.md) §Balance Commitments.)
 
+## the registry
+
+the registry is append-only. each entry names a reserves-cascade family and the rules it adds to the rules intrinsic to every ruleset.
+
+| ruleset | family | rules beyond the intrinsic ones |
+|---|---|---|
+| `cltv-offset-v2` | `cltv-offset-v2` | none |
+| `fee-cap-v3` | `cltv-offset-v2` | none since 2026-10 (its fee cap is now intrinsic, [dep-07](DEP-07.md)) |
+| `balance-commit-v4` | `cltv-offset-v2` | `MissingBalanceCommitment` ([dep-02](DEP-02.md) §Balance Commitments) |
+| `anchor-ladder-v5` | `cltv-offset-v2` | the rules listed under §anchor-ladder-v5 |
+
+before this section existed, the pre-release registry was amended in place: the tier-1 minority (2026-10-02), and the rules of october 2026, which went in as rules of every ruleset. from 2026-10-29 the entries above are frozen. a change to what a named ruleset enforces is a new name.
+
+### anchor-ladder-v5
+
+`anchor-ladder-v5` keeps the `cltv-offset-v2` reserves script, so a ledger reaches it by `QuorumUpgrade` or `QuorumBegin`. it adds:
+
+1. **signed header** ([dep-02](DEP-02.md) §Block height and hash): heights never decrease along the chain, and every update names a block (`HeightDecreases`, `MissingBlockHash`).
+2. **born expired** ([dep-05](DEP-05.md) §Membership Duration): a `QuorumBegin` whose `quorum_expiry` is at or below its `block_height` is non-conforming.
+3. **collateral floor** ([dep-05](DEP-05.md) §Collateral floor, `CollateralBelowFloor`).
+4. **vault-spend proofs** ([dep-06](DEP-06.md) proof 10, its unanchored and lapsed forms, and §Spend challenge).
+
+it does not include `balance-commit-v4`'s `MissingBalanceCommitment`. a ledger that moves from `balance-commit-v4` to `anchor-ladder-v5` stops requiring balance commitments. a later ruleset may combine the two once every implementation emits them.
+
+### which ruleset judges what
+
+- **rules on a `QuorumBegin`'s own quorum** (born expired, collateral floor) are those of the ruleset the `QuorumBegin` names. a `QuorumBegin` that names an earlier ruleset is never judged by them.
+- **vault-spend rules** are those of the ruleset named by the `QuorumBegin` that created the vault being spent (its governing `QuorumBegin`). a spend of a vault created under a ruleset without them is not provable as `UnauthorizedVaultSpend` and opens no challenge. that is the dormant behaviour, and it can only excuse, never convict.
+- **every other rule** is that of the ledger's active ruleset before the update: the ruleset of the last `QuorumBegin` or `QuorumUpgrade` before it, or the one its `LedgerOpen` names (`protocol_version`, [dep-02](DEP-02.md) type 286). a ledger whose `LedgerOpen` names none has no active ruleset before its first `QuorumBegin`, and gated rules are dormant there.
+
+new ledgers name the newest ruleset in their `LedgerOpen`. a quorum moves to the newest ruleset every member declares (`supported_rulesets`). vector: `ruleset_gating.json`.
+
+### intrinsic changes of october 2026
+
+these went in as rules of every ruleset and stay there. none can make history recorded before it non-conforming or provable:
+
+- **they narrow what convicts:**
+  - a dereliction proof binds to a disclosed, seen fraud (FINDINGS D1);
+  - a confiscation is excused if it matches any rebuild, including any rung of its ladder;
+  - an unlinked update is not itself fraud;
+  - a `quorum_expired` dispute does not freeze cosigning, and ends on re-establishment;
+  - a dispute's ground is read from its record;
+  - a nonce need only be unique within its window ([dep-17](DEP-17.md)).
+- **they apply only to operations or fields that did not exist before:**
+  - [dep-20](DEP-20.md) exits, dormancy and migration;
+  - `ObligationRecord` and proof 11 `UnhonouredObligation`;
+  - `QuorumChallenge`;
+  - `rotation_rungs`;
+  - the offer cosign digest.
+- **they were ruled intrinsic as security fixes:**
+  - the fee cap ([dep-07](DEP-07.md), FINDINGS L6);
+  - exit address types and dust floors (FINDINGS L5/L6/D3).
+- **they predate october in both implementations:** `quorum_expiry` within the members' commitments ([dep-05](DEP-05.md) §Quorum expiry).
+- **they are constructions and member policy, not judgments:**
+  - the rotation and confiscation anchors and fee ladders, and their fees ([dep-03](DEP-03.md)), are built the same under every ruleset; only `anchor-ladder-v5`'s vault-spend rules judge them;
+  - the lottery's shape and eligibility cut;
+  - late cosignatures;
+  - cosign refusal;
+  - duplicate delivery.
+
 ## two activation paths
 
 a ledger's version changes only by a quorum-authorized, cosigned operation. there are two, distinguished by whether the change touches on-chain state:
