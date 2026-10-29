@@ -57,7 +57,7 @@ it does not include `balance-commit-v4`'s `MissingBalanceCommitment`. a ledger t
 - **vault-spend rules** are those of the ruleset named by the `QuorumBegin` that created the vault being spent (its governing `QuorumBegin`). a spend of a vault created under a ruleset without them is not provable as `UnauthorizedVaultSpend` and opens no challenge. that is the dormant behaviour, and it can only excuse, never convict.
 - **every other rule** is that of the ledger's active ruleset before the update: the ruleset of the last `QuorumBegin` or `QuorumUpgrade` before it, or the one its `LedgerOpen` names (`protocol_version`, [dep-02](DEP-02.md) type 286). a ledger whose `LedgerOpen` names none has no active ruleset before its first `QuorumBegin`, and gated rules are dormant there.
 
-new ledgers name the newest ruleset in their `LedgerOpen`. a quorum moves to the newest ruleset every member declares (`supported_rulesets`). vector: `ruleset_gating.txt`; the vault-spend twins are in `vault_spend_anchor.txt`.
+a `LedgerOpen`, `QuorumBegin` or `QuorumUpgrade` names its ruleset; nothing is inferred from an order, since there is none. the choice of name is the operator's policy (§operator policy); that every member of the quorum being seated declared the named ruleset is consensus (§version negotiation). vector: `ruleset_gating.txt`; the vault-spend twins are in `vault_spend_anchor.txt`.
 
 ### intrinsic changes of october 2026
 
@@ -125,9 +125,17 @@ corollary: deploying a binary that knows a new ruleset is always safe regardless
 
 ## version negotiation and refusal
 
-- **per-ledger (consensus).** the operator selects, at `QuorumUpgrade` or `QuorumBegin`, a ruleset that every member's `supported_rulesets` covers. which covered ruleset to choose is the operator's policy (implementations choose the newest every member supports); the choice is not consensus, coverage is. a `QuorumBegin`'s ruleset MUST be the one its new reserves output was constructed under, and cosigners verify the reserves script against it (DEP-03); a rotation does not inherit the previous ruleset. a member that cannot validate the target blocks the change — `member_supports` returning false is a hard stop, not a warning, because a quorum that cannot uniformly validate its own rules cannot safely cosign.
+- **per-ledger (consensus).** the operator selects, at `QuorumUpgrade` or `QuorumBegin`, a ruleset that every member's `supported_rulesets` covers. which covered ruleset to choose is the operator's policy (§operator policy); the choice is not consensus, coverage is. a `QuorumBegin` or `QuorumUpgrade` that seats or keeps a member whose `supported_rulesets` does not contain the named ruleset is non-conforming, and every cosigner refuses it. vector: `ruleset_naming.txt`. a `QuorumBegin`'s ruleset MUST be the one its new reserves output was constructed under, and cosigners verify the reserves script against it (DEP-03); a rotation does not inherit the previous ruleset. a member that cannot validate the target blocks the change — `member_supports` returning false is a hard stop, not a warning, because a quorum that cannot uniformly validate its own rules cannot safely cosign.
 - **advertising is a promise.** a node MUST NOT list in `supported_rulesets` a ruleset whose cascade it cannot build and whose op rules it does not enforce. advertising a ruleset it does not enforce lets a quorum activate rules that member will cosign blindly.
 - **per-peer (transport).** the wire handshake's `protocol_version` / `min_protocol_version` (`messages::constants`) governs whether two nodes will talk at all. this is independent of the per-ledger consensus version: a node may speak the latest wire protocol while operating ledgers pinned to an older ruleset.
+
+## operator policy
+
+which ruleset an operator names is not consensus. the reference policy, which both implementations follow:
+
+1. **keep what protects more.** an operator whose ledger is on `balance-commit-v4` names `balance-commit-v4` again at its next `QuorumBegin`, and never proposes a `QuorumUpgrade` away from it. `anchor-ladder-v5` lacks `MissingBalanceCommitment`, so moving would silently drop a rule the depositors had. the move waits for a ruleset that combines the two.
+2. **otherwise move to `anchor-ladder-v5`** when every member of the quorum being seated declares it, and keep the current ruleset when one does not. a new ledger's `LedgerOpen` names `anchor-ladder-v5`.
+3. `balance-commit-v4` and `anchor-ladder-v5` are both in the `cltv-offset-v2` family, so either move is available to a `QuorumUpgrade` as well as a `QuorumBegin`; the policy, not the family, is what keeps a `balance-commit-v4` ledger where it is.
 
 ## downgrade, stall, and emergency paths
 
