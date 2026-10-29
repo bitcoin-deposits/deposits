@@ -57,7 +57,7 @@ it does not include `balance-commit-v4`'s `MissingBalanceCommitment`. a ledger t
 - **vault-spend rules** are those of the ruleset named by the `QuorumBegin` that created the vault being spent (its governing `QuorumBegin`). a spend of a vault created under a ruleset without them is not provable as `UnauthorizedVaultSpend` and opens no challenge. that is the dormant behaviour, and it can only excuse, never convict.
 - **every other rule** is that of the ledger's active ruleset before the update: the ruleset of the last `QuorumBegin` or `QuorumUpgrade` before it, or the one its `LedgerOpen` names (`protocol_version`, [dep-02](DEP-02.md) type 286). a ledger whose `LedgerOpen` names none has no active ruleset before its first `QuorumBegin`, and gated rules are dormant there.
 
-new ledgers name the newest ruleset in their `LedgerOpen`. a quorum moves to the newest ruleset every member declares (`supported_rulesets`). vector: `ruleset_gating.json`.
+new ledgers name the newest ruleset in their `LedgerOpen`. a quorum moves to the newest ruleset every member declares (`supported_rulesets`). vector: `ruleset_gating.txt`; the vault-spend twins are in `vault_spend_anchor.txt`.
 
 ### intrinsic changes of october 2026
 
