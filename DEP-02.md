@@ -520,7 +520,12 @@ A **balance-touching operation** is any operation that mutates a deposit's
 
 `balance_after` / `locked_after` (and the `dest_*` pair where applicable) are
 the deposit's `balance` and `locked_balance` in millisatoshis **after** the
-operation is applied. The pair MUST always appear together: a single update
+update is applied: after its operation, and after the exit requests that the
+update's `block_height` releases before the operation (DEP-20 §3 Expiry). A
+deposit the operation removes (DepositClose) declares `(0, 0)`. The table is
+exhaustive: other operations carry no commitment fields, including those that
+move a deposit's pair under DEP-20 (ExitRequest, ExitCancel, MigrationCredit);
+on them tags 223–229 are unknown odd tags. The pair MUST always appear together: a single update
 then states the deposit's complete fund state, which is the recovery property
 this section exists for. **A decoder MUST reject a half-present pair** (one of
 223/225 present without the other, or 227/229) as a malformed operation — this
@@ -560,10 +565,12 @@ Two rules, split by ruleset (DEP-18):
   cosigned. This is safe to enforce unconditionally: pre-commitment updates
   contain no such fields (odd tags), so no historical update can retroactively
   fault.
-- **Under `balance-commit-v4`:** every balance-touching operation MUST carry
+- **Under `balance-commit-v4` and `balance-anchor-v6`:** every balance-touching operation MUST carry
   its commitment pair(s). A missing pair is
-  `ConformanceViolation::MissingBalanceCommitment`. `cltv-offset-v2` and
-  `fee-cap-v3` ledgers accept commitment-less operations indefinitely.
+  `ConformanceViolation::MissingBalanceCommitment`. `cltv-offset-v2`,
+  `fee-cap-v3` and `anchor-ladder-v5` ledgers accept commitment-less operations indefinitely.
+  Vector: `balance_commitments.txt` (an operator's declarations step by step, an exit
+  release among them, and the verdicts under each ruleset).
 
 A cosigned update whose commitments are wrong is fraud under the existing
 DEP-06 machinery — `NonConformingCosignature` (the quorum signed a

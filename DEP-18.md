@@ -37,6 +37,7 @@ the registry is append-only. each entry names a reserves-cascade family and the 
 | `fee-cap-v3` | `cltv-offset-v2` | none since 2026-10 (its fee cap is now intrinsic, [dep-07](DEP-07.md)) |
 | `balance-commit-v4` | `cltv-offset-v2` | `MissingBalanceCommitment` ([dep-02](DEP-02.md) §Balance Commitments) |
 | `anchor-ladder-v5` | `cltv-offset-v2` | the rules listed under §anchor-ladder-v5 |
+| `balance-anchor-v6` | `cltv-offset-v2` | `anchor-ladder-v5`'s rules plus `MissingBalanceCommitment` (§balance-anchor-v6) |
 
 before this section existed, the pre-release registry was amended in place: the tier-1 minority (2026-10-02), and the rules of october 2026, which went in as rules of every ruleset. from 2026-10-29 the entries above are frozen. a change to what a named ruleset enforces is a new name.
 
@@ -49,7 +50,11 @@ before this section existed, the pre-release registry was amended in place: the 
 3. **collateral floor** ([dep-05](DEP-05.md) §Collateral floor, `CollateralBelowFloor`).
 4. **vault-spend proofs** ([dep-06](DEP-06.md) proof 10, its unanchored and lapsed forms, and §Spend challenge).
 
-it does not include `balance-commit-v4`'s `MissingBalanceCommitment`. a ledger that moves from `balance-commit-v4` to `anchor-ladder-v5` stops requiring balance commitments. a later ruleset may combine the two once every implementation emits them.
+it does not include `balance-commit-v4`'s `MissingBalanceCommitment`. a ledger that moves from `balance-commit-v4` to `anchor-ladder-v5` stops requiring balance commitments; `balance-anchor-v6` combines the two.
+
+### balance-anchor-v6
+
+`balance-anchor-v6` is `anchor-ladder-v5`'s four rules plus `balance-commit-v4`'s `MissingBalanceCommitment` ([dep-02](DEP-02.md) §Balance Commitments), in the `cltv-offset-v2` family. a ledger on either of those rulesets loses no rule by moving to it, and can move by `QuorumUpgrade` or `QuorumBegin`. every rule it adds is judged as §which ruleset judges what says for the rule's origin.
 
 ### which ruleset judges what
 
@@ -133,9 +138,10 @@ corollary: deploying a binary that knows a new ruleset is always safe regardless
 
 which ruleset an operator names is not consensus. the reference policy, which both implementations follow:
 
-1. **keep what protects more.** an operator whose ledger is on `balance-commit-v4` names `balance-commit-v4` again at its next `QuorumBegin`, and never proposes a `QuorumUpgrade` away from it. `anchor-ladder-v5` lacks `MissingBalanceCommitment`, so moving would silently drop a rule the depositors had. the move waits for a ruleset that combines the two.
-2. **otherwise move to `anchor-ladder-v5`** when every member of the quorum being seated declares it, and keep the current ruleset when one does not. a new ledger's `LedgerOpen` names `anchor-ladder-v5`.
-3. `balance-commit-v4` and `anchor-ladder-v5` are both in the `cltv-offset-v2` family, so either move is available to a `QuorumUpgrade` as well as a `QuorumBegin`; the policy, not the family, is what keeps a `balance-commit-v4` ledger where it is.
+1. **name `balance-anchor-v6`** when every member of the quorum being seated declares it. it carries every rule of `balance-commit-v4` and of `anchor-ladder-v5`, so no ledger loses one by moving. a new ledger's `LedgerOpen` names it.
+2. **otherwise keep what protects more.** an operator whose ledger is on `balance-commit-v4` names `balance-commit-v4` again, and never proposes a `QuorumUpgrade` away from it except to `balance-anchor-v6`: `anchor-ladder-v5` lacks `MissingBalanceCommitment`, so moving there would silently drop a rule the depositors had.
+3. **otherwise move to `anchor-ladder-v5`** when every member declares it, and keep the current ruleset when one does not.
+4. all four registered rulesets past `cltv-offset-v2` share its family, so every move above is available to a `QuorumUpgrade` as well as a `QuorumBegin`; the policy, not the family, decides which. vector: the `plan` cases of `ruleset_naming.txt`.
 
 ## downgrade, stall, and emergency paths
 
