@@ -90,7 +90,8 @@ these went in as rules of every ruleset and stay there. none can make history re
   - the lottery's shape and eligibility cut;
   - late cosignatures;
   - cosign refusal;
-  - duplicate delivery.
+  - duplicate delivery;
+  - descriptor validity ([dep-16](DEP-16.md) §descriptor validity), which grounds a refusal to cosign and never a conviction.
 
 ## two activation paths
 

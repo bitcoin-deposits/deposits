@@ -321,9 +321,9 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 | 18 | cosigner_sig | 64 | DepositOpen (co-signer guarantee, optional) |
 | 24 | deposit_pubkey | 33 | DepositOpen |
 | 200 | deposit_id | 16 | DepositOpen, DepositClose, FeeChange, DepositKeyRotate, FeeCollect |
-| 202 | descriptor | variable | DepositOpen (miniscript) |
+| 202 | descriptor | variable | DepositOpen (a DEP-16 descriptor; must be valid, DEP-16 §descriptor validity) |
 | 204 | witness | variable | TransferLock, DepositKeyRotate (nested) |
-| 208 | new_descriptor | variable | DepositKeyRotate |
+| 208 | new_descriptor | variable | DepositKeyRotate (must be valid, DEP-16 §descriptor validity) |
 | 232 | receive_requires_sig | 1 | DepositOpen |
 
 #### Fees

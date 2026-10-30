@@ -171,6 +171,35 @@ a descriptor that passes admission is well-formed in the sense the system invari
 
 operators may impose additional operational limits — maximum descriptor size, maximum nesting depth, maximum operation argument size — as a matter of local policy. these are not protocol-level checks; they are how an operator manages its own resources and need no admission machinery.
 
+### descriptor validity
+
+a descriptor enters a ledger in a `DepositOpen` (`descriptor`) or a `DepositKeyRotate` (`new_descriptor`). before an operator proposes either and before a member cosigns it, both check that the text is a **valid descriptor**. the two implementations have different parsers, so the rule is lexical and exact; the shared vector `descriptor_validity.json` (75 cases) pins it.
+
+a descriptor is valid iff all of the following hold.
+
+1. **characters.** every byte is printable ascii (`0x21`–`0x7e`) or whitespace: space, tab, line feed, vertical tab, form feed, carriage return (`0x09`–`0x0d`, `0x20`). any other byte, any non-ascii character included, makes it invalid.
+2. **tokens.** whitespace separates tokens and is otherwise ignored. a token is one of `( ) [ ] , = :`, `<`, `<=`, `>`, `>=`, a **word**, or an **integer**.
+   - a word is a maximal run of `[A-Za-z0-9_]`. a word of digits only is an integer.
+   - `-` is only the sign of an integer: it must be followed by a digit, and the integer is `-` and the digits after it (in `-12ab`, `-12` is an integer and `ab` a separate word).
+   - an integer must lie in `[-2^127, 2^127 - 1]`.
+   - any other character is an error.
+3. **keys.** a key literal is a word of exactly 66 hex digits (either case) naming a 33-byte compressed secp256k1 point: prefix `02` or `03`, and `x` on the curve. every word of 66 hex digits must be one. a word of 130 hex digits (an uncompressed key) makes the descriptor invalid. x-only keys are not key literals in v1, including `tr`'s internal key (dep-17 open question on key serialization).
+4. **grammar.** the tokens form one descriptor of §descriptor structure and nothing follows it. the surface details that matter:
+   - `and(...)` and `or(...)` may be empty;
+   - `thresh(k, ...)`, `multi(k, ...)` and `pk_threshold(k, ...)` take an integer `k`;
+   - `cmp` takes an operator token (`=`, `<`, `<=`, `>`, `>=`), never a word; the named forms `eq`, `lt`, `le`, `gt`, `ge` are combinators;
+   - the attestation schema is written `price_schema(n)`, with `n` an integer;
+   - a digest is 64 (`sha256`, `hash256`) or 40 (`ripemd160`, `hash160`) hex digits, bare or `0x`-prefixed;
+   - a `0x` byte literal has an even, non-zero number of hex digits;
+   - a `with(...)` name matches `[a-z_][a-z0-9_]*`, and no name is bound twice;
+   - in a value position, a word that is neither a bound name nor a key literal is a name reference, and must resolve (below);
+   - in a `with(...)` literal, such a word is a byte string of its ascii text.
+5. **depth.** nesting is at most 128: each boolean term, value term and literal entered while parsing counts one level, and entering a 129th nested level is an error.
+6. **admission.** polarity holds (§admission), every name the body references is bound by its `with(...)`, and every `thresh(k, B1, ..., Bn)` has `1 <= k <= n`. capability is *not* part of validity: it is the operator's own advertisement, which a judge of the ledger cannot see.
+7. **size.** the descriptor's length in bytes is at most the smallest `max_descriptor_bytes` declared by a member of the ledger's active quorum (dep-02 `QuorumAddMember`), when any member declared one.
+
+an operator does not propose, and a member refuses to cosign, a `DepositOpen` or `DepositKeyRotate` whose descriptor is invalid. this is a refusal rule, not a fraud ground: a cosigned update carrying an invalid descriptor applies as recorded and is not provable as non-conforming under any ruleset registered so far (dep-18 §intrinsic changes of october 2026). the descriptor is the depositor's own, so an invalid one harms only the deposit it names; and the two implementations admitted different texts before this rule (a cl operator's `pk(v6-1234)` was cosigned by cl members and convicted by reference members), so convicting on it would convict history recorded before it.
+
 ## modification
 
 modification operations (`insert`, `replace`, `delete`) target ast paths into the descriptor and produce a candidate descriptor `D'` from the current descriptor `D` and the operation's arguments. the operator computes `D'`, runs admission against it, and binds the deposit to `D'` only if both checks pass. a candidate that fails either is rejected — the modification operation as a whole is rejected, even though `D` authorized the underlying request.
