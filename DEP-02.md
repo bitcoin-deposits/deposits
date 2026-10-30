@@ -332,7 +332,7 @@ The `message` field contains a TLV-encoded operation. Type 0 is always a 1-byte 
 |---|---|---|---|
 | 12 | fees | variable | DepositOpen (nested FeeStructure) |
 | 20 | new_fees | variable | FeeChange (nested FeeStructure) |
-| 226 | transfer_fees | variable | DepositOpen (nested TransferFeeSchedule) |
+| 226 | transfer_fees | variable | DepositOpen (nested TransferFeeSchedule; absent = DEP-07's default, 2 msat + 20 bps) |
 | 244 | fee_change_after_blocks | 4 | DepositOpen |
 | 246 | fee_change_notice_blocks | 4 | DepositOpen |
 | 248 | fee_change_limit_bps | 2 | DepositOpen |

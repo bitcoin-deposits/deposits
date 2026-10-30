@@ -57,6 +57,8 @@ The same wide-integer requirement applies: `amount_msats * rate_bps` can overflo
 
 The sender must provide the exact expected fee in the `TransferLock` request. The operator rejects mismatches.
 
+**Default schedule.** A `DepositOpen` that carries no `transfer_fees` (DEP-02 type 226) gives the deposit the schedule `fixed_msats = 2`, `rate_bps = 20`, under every ruleset. Every rule that reads the deposit's schedule reads this one, including the fixed portion a `TransferFail`, `InvoiceFail` or `OnchainFail` keeps (§Fee on Failure). It is not zero. (Signet soak, 2026-10-30: cl-deposits took an absent schedule as zero and the reference took this one, so a `TransferFail` kept 2 msat on one replica and not the other. Nothing caught it until cl operators began declaring balance commitments, which every reference member then refused as 2 msat off.) Vector: `balance_commitments.txt` (the deposit `pk(commit-d)`).
+
 ### Why two components, not bps-only
 
 External reviewers periodically propose collapsing fees to basis-points-only on the grounds that a flat per-op fee "taxes the behaviors agent commerce runs on." That framing is wrong, and the protocol explicitly rejects it.
