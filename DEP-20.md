@@ -355,7 +355,8 @@ operator MAY re-offer. No party is obliged to take a bucket.
   same operator on the same ledger at a higher sequence, its `consumed_notice` the notice's hash.
   If it migrated — `migration_receiver` this ledger's operator, block height below
   `expires_at_height` — the fold credits exactly its `migration_manifest`: each entry's deposit
-  opened with its descriptor and fee schedule if new, credited its exact amount, and the notice's
+  opened with its descriptor and fee schedule if new (opened at the `MigrationCredit` update's
+  block height, which is also its fee baseline, as for a `DepositOpen` in DEP-07), credited its exact amount, and the notice's
   `premium_msats` credited to the accept's `deposit_id` (the receiver keeps it if none); the
   outpoint (`new_outpoint_txid`, `migration_vout`) is recorded. If it did not, the accept is
   resolved with nothing credited. The credits draw on the accept's reservation; the receiver
