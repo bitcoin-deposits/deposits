@@ -203,6 +203,8 @@ Each `CausalLink` is a co-signed update on ledger X whose `member_ledger_hash` c
 
 Direct embedding: empty chain. One hop: one link. Longer paths: multiple links.
 
+**Verify before publishing.** A node MUST NOT publish a proof, nor enter or arm a dispute on one, that it has not verified as any verifier would (§Verification): from the history, never from the replica state that refused the update. A replica's state can be wrong, for example an update applied twice by two writers; a replay that accepts the update means the fault is the replica's, and the node repairs its replica and accuses no one. Only the published proof is ever judged, so a proof its own author cannot verify is the false accusation every other rule here exists to prevent. (Signet soak, 2026-10-30: a cl replica caught up one ledger from three threads, applied a transfer twice, refused the operator's next balance commitment, and published a NonConformingUpdate and four contagion proofs that every verifier, including its own a few seconds later, rejected.)
+
 **JSON form.** A broadcast proof is the JSON object `{proof_type, accused, ledger_id, evidence:
 {<variant>: {...}}}`, where `<variant>` is the proof type's name. The one exception is an
 `UncreditedOnchainPayment` with migration evidence, whose variant is `UncreditedMigration`. Every
