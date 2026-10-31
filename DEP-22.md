@@ -1,6 +1,6 @@
 # DEP-22: Proofs from Signed Evidence (Commitment Chains)
 
-Status: Draft
+Status: Draft (parked). Motivation: verification cost and light verifiers (a contagion proof against a cosigner of a very large ledger is judged by quorums that do not replicate it). Not needed for correctness: replica-state mistakes are handled by verify-before-publish from replayed checkpoints (DEP-06).
 
 ## Abstract
 
