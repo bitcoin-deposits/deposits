@@ -402,7 +402,25 @@ proofs against three honest cosigners.) A judge also excuses a confiscation buil
 before this rule, over every `DisputeEnter` a disputant ever made: that only excuses more, never
 convicts more, so it holds under every ruleset (DEP-18). Vector: `dispute_scope.txt`.
 
-*Participation is open, winning is grounded (informative).* Anyone may arm, for any motive: a member may copy another's valid grounds into its own `DisputeEnter` simply because joining looks worthwhile, and motive is never examined. But the winner's fork becomes the ledger's canonical history, so under `grounded-arms-v7` (DEP-18) only an arm whose fork's `DisputeEnter` has grounds counts in the cut (condition 5 below). Cosigners therefore never sign a lottery that could make a `DisputeEnter` without grounds canonical. (Signet soak, 2026-11-02: an arm on cld1's fork, whose `DisputeEnter` cited a proof every verifier had rejected, was a participant in F's lottery.)
+*Participation is open, winning is grounded (informative).* Anyone may arm, for any motive: a member may copy another's valid grounds into its own `DisputeEnter` simply because joining looks worthwhile, and motive is never examined. But the winner's fork becomes the ledger's canonical history, so under `grounded-arms-v7` (DEP-18) only an arm whose fork's `DisputeEnter` has grounds counts in the cut (§Grounded arms below). Cosigners therefore never sign a lottery that could make a `DisputeEnter` without grounds canonical. (Signet soak, 2026-11-02: an arm on cld1's fork, whose `DisputeEnter` cited a proof every verifier had rejected, was a participant in F's lottery.)
+
+**Grounded arms (`grounded-arms-v7`).** When the ruleset in force at the dispute's fork point
+(the `protocol_version` of the latest `QuorumBegin` or `QuorumUpgrade` at or below it, else the
+`LedgerOpen`'s) is `grounded-arms-v7`, an arm counts only if its fork's `DisputeEnter` in the
+current dispute (§The dispute) is **grounded**; any other arm is disregarded before the snapshot,
+as if never made: it neither moves E nor becomes a participant. A `DisputeEnter` is grounded by:
+
+- *an expiry ground*: it is a `quorum_expired` dispute (DEP-05 §The ground of a dispute) and its
+  signed `block_height` is above the `quorum_expiry` in force at its `last_valid_sequence`; or
+- *a proven ground*: it carries `fraud_proof` (DEP-02 TLV 345), the DEP-06 JSON form of the
+  broadcast proof it acts on; the proof's hash equals its `fraud_proof_hash` (TLV 344); the proof
+  accuses the operator of the update at its `last_valid_sequence`; and the proof verifies as a
+  received proof does (DEP-06), a lapsed spend challenge included.
+
+The grounds travel on the fork itself, so the cut needs no lookup by hash. A member that cannot
+judge a proven ground yet (evidence on another ledger it has not fetched) reaches no cut: it
+neither proposes nor cosigns, and a judge of a confiscation reaches no verdict (DEP-06), until it
+can. It never treats an unjudged ground as grounded or as ungrounded. Vector: `grounded_arms.txt`.
 
 **Eligibility snapshot.** For each armer take its latest `DisputeArmed` (highest sequence on its
 fork; a re-arm replaces the declaration). Let `E` be the highest signed-header `block_height` among
@@ -416,25 +434,7 @@ An armer is a **participant** iff all of:
    covers exactly this amount, so only the ratio padding and fee come from the replacement);
 2. the outpoint was confirmed in a block at height ≤ E;
 3. the outpoint was unspent as of the end of block E (spent in a block > E, or not at all); and
-4. its value is ≥ `replacement_collateral_amount`; and
-5. under `grounded-arms-v7`, the ruleset in force at the dispute's fork point (the
-   `protocol_version` of the latest `QuorumBegin` or `QuorumUpgrade` at or below it, else the
-   `LedgerOpen`'s), its fork's `DisputeEnter` in the current dispute (§The dispute) is
-   **grounded**:
-   - *expiry ground*: it is a `quorum_expired` dispute (DEP-05 §The ground of a dispute) and
-     its signed `block_height` is above the `quorum_expiry` of the `QuorumBegin` at or below
-     its `last_valid_sequence`; or
-   - *proven ground*: it carries `fraud_proof` (DEP-02 TLV 345), the DEP-06 JSON form of the
-     broadcast proof it acts on; the proof's hash equals its `fraud_proof_hash` (TLV 344); the
-     proof accuses the operator of the update at its `last_valid_sequence`; and the proof
-     verifies as a received proof does (DEP-06), a lapsed spend challenge included.
-
-   Every other `DisputeEnter` has no grounds, and its armer is excluded. The grounds travel on
-   the fork itself, so the cut needs no lookup by hash. A member that cannot judge a proven
-   ground yet (evidence on another ledger it has not fetched) reaches no cut: it neither
-   proposes nor cosigns, and a judge of a confiscation reaches no verdict (DEP-06), until it
-   can. It never treats an unjudged ground as either grounded or ungrounded. Vector:
-   `grounded_arms.txt`.
+4. its value is ≥ `replacement_collateral_amount`.
 
 Only the confirmed chain counts: mempool state is never consulted, so the verdict is stable once
 E is buried, including after the winner spends its pledge into the claim. `claim_fee_floor` is
