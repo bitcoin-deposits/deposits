@@ -232,7 +232,7 @@ Every authorised spend of a vault carries, as its last output, a zero-value anch
   `QuorumBegin` is the unique child of `H` on the operator's chain;
 - a confiscation: `H = tagged_hash("deposits/fork-point", cosign_data)` of the disputed ledger's
   update at the dispute's fork point, the lowest `last_valid_sequence` its `DisputeEnter`s name
-  (DEP-06 §Phase 2). `cosign_data` (DEP-02 §Signing) leaves out every signature, so every variant of
+  (DEP-06 §Phase 2; which `DisputeEnter`s are the dispute's: §"The dispute" below). `cosign_data` (DEP-02 §Signing) leaves out every signature, so every variant of
   that update gives the same `H`. Its chain hash would not do: replicas hold the tip with different
   cosignature sets, and the fork point is a tip (regtest 2026-10-21: one disputant's `DisputeEnter`
   extended another variant of the fork-point update than the proposer's, and it never recognised the
@@ -386,6 +386,27 @@ they win:
 Which armers take part in the lottery (and, in a punitive dispute, receive a slashing share) is a
 deterministic function of the ledger and the confirmed chain, so every cosigner computes the same
 set and no single declaration can stall the dispute.
+
+**The dispute.** A disputant may hold an older `DisputeEnter` on a vault the ledger has since rotated
+away (a dispute that went dormant, or was entered on a proof that did not verify); it is no part of
+the current dispute. Let Q be the sequence of the original operator's latest `QuorumBegin` at or
+below the highest `last_valid_sequence` any `DisputeEnter` names: the `QuorumBegin` that created the
+vault being confiscated. A disputant takes part only through its latest `DisputeEnter` (highest
+sequence) whose `last_valid_sequence` is at or above Q, and only through its updates after that
+fork point (its arms, its `ObligationRecord`s); a disputant with no such `DisputeEnter` takes no
+part. The fork point, the anchor, the shape (respectful or punitive), the armers and the obligations
+are all read from the dispute so reduced, by every builder, cosigner, watch and verifier alike.
+(Signet soak, 2026-11-02: one disputant's stale `DisputeEnter` moved a watch's fork point below the
+builders', so the watch's anchor missed the real confiscation; its challenge lapsed into contagion
+proofs against three honest cosigners.) A judge also excuses a confiscation built under the reading
+before this rule, over every `DisputeEnter` a disputant ever made: that only excuses more, never
+convicts more, so it holds under every ruleset (DEP-18). Vector: `dispute_scope.txt`.
+
+*Participation, not grounds (informative).* Eligibility is the pledge alone. An armer's own
+`DisputeEnter` reason is not examined: a member may arm on another's dispute simply because it
+judges joining worthwhile, so either it participates in the dispute or it does not. A sketchy or
+false published reason is answered by a separate action against its author, never by excluding the
+armer from the lottery.
 
 **Eligibility snapshot.** For each armer take its latest `DisputeArmed` (highest sequence on its
 fork; a re-arm replaces the declaration). Let `E` be the highest signed-header `block_height` among
