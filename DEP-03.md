@@ -414,8 +414,11 @@ as if never made: it neither moves E nor becomes a participant. A `DisputeEnter`
   signed `block_height` is above the `quorum_expiry` in force at its `last_valid_sequence`; or
 - *a proven ground*: it carries `fraud_proof` (DEP-02 TLV 345), the DEP-06 JSON form of the
   broadcast proof it acts on; the proof's hash equals its `fraud_proof_hash` (TLV 344); the proof
-  accuses the operator of the update at its `last_valid_sequence`; and the proof verifies as a
-  received proof does (DEP-06), a lapsed spend challenge included.
+  accuses the operator of the update at its `last_valid_sequence`; and the proof's evidence
+  verifies (DEP-06 §Verification, the per-type check), a lapsed spend challenge included. No
+  embedding is asked for: the `DisputeEnter` that carries the proof is itself a signed, dated
+  update on a fork of the accused ledger, which is what an embedding gives. A member that joins
+  another's dispute cites the same grounds by carrying that proof in its own `DisputeEnter`.
 
 The grounds travel on the fork itself, so the cut needs no lookup by hash. A member that cannot
 judge a proven ground yet (evidence on another ledger it has not fetched) reaches no cut: it
