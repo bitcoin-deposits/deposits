@@ -402,11 +402,7 @@ proofs against three honest cosigners.) A judge also excuses a confiscation buil
 before this rule, over every `DisputeEnter` a disputant ever made: that only excuses more, never
 convicts more, so it holds under every ruleset (DEP-18). Vector: `dispute_scope.txt`.
 
-*Participation, not grounds (informative).* Eligibility is the pledge alone. An armer's own
-`DisputeEnter` reason is not examined: a member may arm on another's dispute simply because it
-judges joining worthwhile, so either it participates in the dispute or it does not. A sketchy or
-false published reason is answered by a separate action against its author, never by excluding the
-armer from the lottery.
+*Participation is open, winning is grounded (informative).* Anyone may arm, for any motive: a member may copy another's valid grounds into its own `DisputeEnter` simply because joining looks worthwhile, and motive is never examined. But the winner's fork becomes the ledger's canonical history, so under `grounded-arms-v7` (DEP-18) only an arm whose fork's `DisputeEnter` cites grounds that verify from evidence alone counts in the cut (pending: specified with that ruleset).
 
 **Eligibility snapshot.** For each armer take its latest `DisputeArmed` (highest sequence on its
 fork; a re-arm replaces the declaration). Let `E` be the highest signed-header `block_height` among
