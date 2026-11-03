@@ -411,6 +411,7 @@ stay valid. See DEP-10 §"Operator-direct pay" for the settlement model.
 | 292 | anchor_block_hash | 32 | DisputeEnter (optional; `QuorumExpired` evidence) |
 | 294 | anchor_block_height | 4 | DisputeEnter (optional; with 292) |
 | 344 | fraud_proof_hash | 32 | DisputeEnter (optional; the DEP-06 proof hash the dispute acts on — DEP-19 §6 disclosure) |
+| 345 | fraud_proof | variable | DisputeEnter (odd, optional; the DEP-06 JSON form of the broadcast proof whose hash is TLV 344, UTF-8. A disputant on a ledger under `grounded-arms-v7` MUST carry it with every punitive `DisputeEnter`: an arm counts only with grounds, DEP-03 §Eligibility) |
 | 108 | new_custodian | 33 | DisputeAcquire |
 | 110 | claim_txid | 32 | DisputeAcquire |
 | 118 | armed_block | 4 | DisputeArmed |

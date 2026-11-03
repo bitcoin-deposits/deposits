@@ -38,6 +38,7 @@ the registry is append-only. each entry names a reserves-cascade family and the 
 | `balance-commit-v4` | `cltv-offset-v2` | `MissingBalanceCommitment` ([dep-02](DEP-02.md) §Balance Commitments) |
 | `anchor-ladder-v5` | `cltv-offset-v2` | the rules listed under §anchor-ladder-v5 |
 | `balance-anchor-v6` | `cltv-offset-v2` | `anchor-ladder-v5`'s rules plus `MissingBalanceCommitment` (§balance-anchor-v6) |
+| `grounded-arms-v7` | `cltv-offset-v2` | `balance-anchor-v6`'s rules plus grounded arms (§grounded-arms-v7) |
 
 before this section existed, the pre-release registry was amended in place: the tier-1 minority (2026-10-02), and the rules of october 2026, which went in as rules of every ruleset. from 2026-10-29 the entries above are frozen. a change to what a named ruleset enforces is a new name.
 
@@ -55,6 +56,10 @@ it does not include `balance-commit-v4`'s `MissingBalanceCommitment`. a ledger t
 ### balance-anchor-v6
 
 `balance-anchor-v6` is `anchor-ladder-v5`'s four rules plus `balance-commit-v4`'s `MissingBalanceCommitment` ([dep-02](DEP-02.md) §Balance Commitments), in the `cltv-offset-v2` family. a ledger on either of those rulesets loses no rule by moving to it, and can move by `QuorumUpgrade` or `QuorumBegin`. every rule it adds is judged as §which ruleset judges what says for the rule's origin.
+
+### grounded-arms-v7
+
+`grounded-arms-v7` is `balance-anchor-v6`'s five rules plus **grounded arms** ([dep-03](DEP-03.md) §Eligibility snapshot, condition 5): an arm counts in the eligibility cut, and so in the lottery, only if its fork's `DisputeEnter` has grounds, an expiry ground or a proven one carried on the fork as `fraud_proof` (DEP-02 TLV 345). It is in the `cltv-offset-v2` family, so a ledger moves to it by `QuorumUpgrade` or `QuorumBegin`. It changes which confiscations are authorised ([dep-06](DEP-06.md) §Authorised confiscation): under an earlier ruleset a confiscation whose lottery includes an arm without grounds is authorised, and under this one it is not. That is a rule that convicts, so it holds only from this ruleset on and never judges a dispute whose fork point is under an earlier one. Motive is never examined: a member may arm on another's grounds by citing them in its own `DisputeEnter`.
 
 ### which ruleset judges what
 
@@ -139,11 +144,11 @@ corollary: deploying a binary that knows a new ruleset is always safe regardless
 
 which ruleset an operator names is not consensus. the reference policy, which both implementations follow:
 
-1. **name `balance-anchor-v6`** when every member of the quorum being seated declares it. it carries every rule of `balance-commit-v4` and of `anchor-ladder-v5`, so no ledger loses one by moving. a new ledger's `LedgerOpen` names it.
-2. **otherwise keep what protects more.** an operator whose ledger is on `balance-commit-v4` names `balance-commit-v4` again, and never proposes a `QuorumUpgrade` away from it except to `balance-anchor-v6`: `anchor-ladder-v5` lacks `MissingBalanceCommitment`, so moving there would silently drop a rule the depositors had.
+1. **name `grounded-arms-v7`** when every member of the quorum being seated declares it, else **`balance-anchor-v6`** when every member declares that. each carries every rule of the rulesets before it, so no ledger loses one by moving. a new ledger's `LedgerOpen` names `grounded-arms-v7`.
+2. **otherwise keep what protects more.** an operator whose ledger is on `balance-commit-v4` names `balance-commit-v4` again, and never proposes a `QuorumUpgrade` away from it except to `balance-anchor-v6` or `grounded-arms-v7`: `anchor-ladder-v5` lacks `MissingBalanceCommitment`, so moving there would silently drop a rule the depositors had. likewise a ledger on `balance-anchor-v6` keeps it rather than move anywhere but `grounded-arms-v7`.
 3. **otherwise move to `anchor-ladder-v5`** when every member declares it, and keep the current ruleset when one does not.
 4. **a consent request proposes only what its member is known to support.** the `chosen_ruleset` of a `consent_request` is a proposal, not the choice: the `QuorumBegin` names its ruleset by 1–3 over every member's fresh declaration. a member may refuse a proposal it does not support, and every release before `balance-anchor-v6` does. so the operator proposes the target of 1–3 for that member alone when the member's last signed declaration on this ledger (staged, else seated) lists it, and otherwise the ledger's current ruleset (a ledger with neither a ruleset nor a seated quorum: the target of 1), else `cltv-offset-v2`. the member's response still declares everything it supports, so a quorum whose members have all upgraded moves to the target at the `QuorumBegin` that follows. (signet soak, 2026-10-30, a stochastic deploy: upgraded cl operators proposed `balance-anchor-v6` to reference members still on the previous release, which refused, and the rotations of G and I failed for as long as the versions were mixed.) vector: the `propose` cases of `ruleset_naming.txt`.
-5. all four registered rulesets past `cltv-offset-v2` share its family, so every move above is available to a `QuorumUpgrade` as well as a `QuorumBegin`; the policy, not the family, decides which. vector: the `plan` cases of `ruleset_naming.txt`.
+5. all five registered rulesets past `cltv-offset-v2` share its family, so every move above is available to a `QuorumUpgrade` as well as a `QuorumBegin`; the policy, not the family, decides which. vector: the `plan` cases of `ruleset_naming.txt`.
 
 ## downgrade, stall, and emergency paths
 
