@@ -420,7 +420,7 @@ as if never made: it neither moves E nor becomes a participant. A `DisputeEnter`
 The grounds travel on the fork itself, so the cut needs no lookup by hash. A member that cannot
 judge a proven ground yet (evidence on another ledger it has not fetched) reaches no cut: it
 neither proposes nor cosigns, and a judge of a confiscation reaches no verdict (DEP-06), until it
-can. It never treats an unjudged ground as grounded or as ungrounded. Vector: `grounded_arms.txt`.
+can. It never treats an unjudged ground as grounded or as ungrounded. A `DisputeEnter` without grounds also plays no part in the confiscation's shape (DEP-06 §Respectful vs punitive): the shape is respectful iff every grounded `DisputeEnter` is for a lapsed quorum, so an accusation without grounds cannot turn a respectful confiscation punitive. Vector: `grounded_arms.txt`.
 
 **Eligibility snapshot.** For each armer take its latest `DisputeArmed` (highest sequence on its
 fork; a re-arm replaces the declaration). Let `E` be the highest signed-header `block_height` among
