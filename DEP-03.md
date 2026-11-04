@@ -349,11 +349,13 @@ When proof of provable misbehaviour is presented:
 - The full UTXO (reserves + collateral) goes to the confiscation tx.
   - `obligations` worth of reserves → lottery winner (becomes the new
     backing for inherited deposits).
-  - The remainder, `(reserves − obligations) + collateral`, is split equally
-    among the `Q` cosigners. **The lottery winner does not retain the
-    confiscated collateral as a windfall** — they receive their per-cosigner
-    share alongside everyone else, evenly aligning incentives across the
-    quorum.
+  - The remainder, `(reserves − obligations) + collateral`, less the fee and any
+    obligation splice-outs (§Confiscation ladder), goes to the same lottery
+    output: the confiscation pays one lottery output, and a single winner
+    claims it and takes the ledger. (Earlier drafts split the remainder among
+    the cosigners; no implementation builds that shape, and the single winner
+    is what makes one operator liable for the ledger.) The accused are never
+    paid: they cannot be participants (§The accused never win).
 - The lottery winner takes over the ledger, inheriting deposit obligations
   and the lottery output.
 - **The winner provides replacement collateral** as a fresh input when
@@ -425,6 +427,31 @@ judge a proven ground yet (evidence on another ledger it has not fetched) reache
 neither proposes nor cosigns, and a judge of a confiscation reaches no verdict (DEP-06), until it
 can. It never treats an unjudged ground as grounded or as ungrounded. A `DisputeEnter` without grounds also plays no part in the confiscation's shape (DEP-06 §Respectful vs punitive): the shape is respectful iff every grounded `DisputeEnter` is for a lapsed quorum, so an accusation without grounds cannot turn a respectful confiscation punitive. Vector: `grounded_arms.txt`.
 
+**The accused never win (every ruleset).** A key the dispute's own grounds convict is not a
+participant. The operator was always excluded ("it cannot dispute its own ledger"), and a member
+that signed the fault is complicit in it (DEP-05 §Co-signing), so neither may take custody of the
+ledger whose fault it signed. `Accused(grounds)` is the operator of the update at the dispute's
+`last_valid_sequence`, plus, for each `DisputeEnter` counted in the current dispute (under
+`grounded-arms-v7`, each grounded one), the keys its carried proof (TLV 345) convicts from its own
+evidence:
+
+| Ground | Keys it convicts |
+|---|---|
+| `NonConformingUpdate`, `NonConformingCosignature` | its accused, and every key that signed the faulty update (operator and cosigners) |
+| `Equivocation` | its accused, and every key that signed both updates |
+| `UnauthorizedVaultSpend` (either form) | its accused, and every key whose signature is in the spend's witness |
+| any other (an omission, an expiry) | its accused only |
+
+Only this dispute's grounds count: a key convicted on another ledger is not excluded here. An
+armer whose key is in `Accused(grounds)` is disregarded before the snapshot, as an ungrounded arm
+is: it neither moves E nor becomes a participant. If no armer remains, nobody is eligible and the
+window reopens as below. Builders propose, and cosigners sign, only the lottery this yields. A
+confiscation whose lottery includes an accused key, built before this rule was written down, is
+still authorised (DEP-06 §Authorised confiscation: the lottery may be over the cut of any subset
+of the arms, and the clarified set is one such subset), so the rule never convicts anyone and holds
+under every ruleset (DEP-18). Vector: `lottery_accused.txt`. (Signet soak, 2026-11-04: colluder
+cld26 cosigned an invalid credit, was proven for it, armed the dispute and won custody.)
+
 **Eligibility snapshot.** For each armer take its latest `DisputeArmed` (highest sequence on its
 fork; a re-arm replaces the declaration). Let `E` be the highest signed-header `block_height` among
 those updates. Under v2 signing the header's `block_hash` binds that height to a real block, so an
@@ -445,8 +472,7 @@ E is buried, including after the winner spends its pledge into the claim. `claim
 claim's size, or 5,000 sats when no feerate is recorded. It is a rule, not a policy, because cosigners must
 agree on it.
 
-An armer that is not a participant is excluded: it is not in the lottery script, receives no
-slashing share, and counts as a non-arming member for the recovery quorum (it may cosign the
+An armer that is not a participant is excluded: it is not in the lottery script, receives nothing, and counts as a non-arming member for the recovery quorum (it may cosign the
 confiscation). Cosigners MUST refuse a confiscation whose participant set differs from the one
 this rule yields, and MUST NOT refuse one because an armer was excluded.
 
@@ -553,7 +579,9 @@ what answers a challenge of the spend (DEP-06 §Spend challenge).
 
 **Broadcast.** The proposer assembles every rung it has a threshold of signatures for, broadcasts
 rung 0, and keeps broadcasting while none has confirmed: rung `min(k − 1, ⌊(tip − h_c) / 6⌋)`, where
-`h_c` is the height at which it first broadcast the confiscation. Any holder of the assembled rungs
+`h_c` is the height at which it first broadcast the confiscation; `tip` and `h_c` are both read
+from the node's current view of the chain's tip, never a wallet's last sync, whose lag makes a rung
+look overdue (signet soak, 2026-11-04: rung 1 went out 24 s after rung 0). Any holder of the assembled rungs
 does the same from its own first broadcast (policy, not consensus: no chain fact marks when a
 confiscation became possible, since the arm window, the cut and the tier can each be long past when
 the proposal is made). A proposer that disappears is replaced by any recovery voter proposing again:

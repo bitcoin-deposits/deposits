@@ -152,7 +152,12 @@ Challenge Answer events, Kind 9112), in any order and on any fork:
    whether that `QuorumBegin` itself conforms is judged as for any update (`NonConformingUpdate`,
    `NonConformingCosignature`), not as a vault spend.
 2. **A confiscation**: the spend is an authorised confiscation (below), whose anchor is its dispute's
-   fork-point anchor (DEP-03 §On-Chain State Anchor).
+   fork-point anchor (DEP-03 §On-Chain State Anchor). Its Challenge Answer carries the dispute's
+   disputant updates (every `DisputeEnter`, `DisputeArmed` and later update by an operator other
+   than the ledger's, in the current dispute), so a judge that missed some rebuilds the same rung.
+   Any node that holds the dispute and rebuilds the spend as a rung of it answers, signer or not.
+   (Signet soak, 2026-11-04: the reference answered only rotation challenges, so a confiscation
+   challenge lapsed unanswered and its proofs reached an honest member.)
 
 A spend with an answer is excused. A spend without an anchor is proven at once (unanchored form). For
 an anchored spend without an answer, the judge does not prove anything. It records a challenge: it
@@ -378,7 +383,7 @@ needs a different claim construction, not a constant change.
 
 **Punitive** (proven non-conformance):
 - The amount covering the ledger's obligations goes to the lottery output (the winner inherits those obligations against that backing)
-- The remainder (excess reserves + full collateral) is split equally across the **armers** (DisputeArmed participants), one per-armer slashing-share output. Non-armers get no slice — arming is the gate to a share, revealing is the gate to keeping it (see §"Arm-and-reveal forfeiture" below).
+- The remainder (excess reserves + full collateral), less the fee and any obligation splice-outs, goes to the same lottery output, which the single winner claims (DEP-03 §Punitive custody). Arming is the gate to being a participant, revealing is the gate to staying one (see §"Arm-and-reveal forfeiture" below), and a key the dispute's grounds convict is never a participant (DEP-03 §The accused never win).
 - If the operator runs multiple ledgers, proof of non-conformance on one ledger can be presented to the other ledgers' quorums, triggering slashing there as well
 - Punitive disputes operate at strict majority in Tier 0. Past
   `quorum_expiry`, a valid punitive proof MAY be executed by whichever
