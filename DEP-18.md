@@ -89,6 +89,7 @@ these went in as rules of every ruleset and stay there. none can make history re
 - **they were ruled intrinsic as security fixes:**
   - the fee cap ([dep-07](DEP-07.md), FINDINGS L6);
   - exit address types and dust floors (FINDINGS L5/L6/D3).
+- **they accept a proof that could already be made:** an uncredited on-chain payment needs no embedding ([dep-06](DEP-06.md) §Embedding, 2026-11-04). Its proof could always be embedded at any later time, so accepting it without one makes nothing provable that was not.
 - **they predate october in both implementations:** `quorum_expiry` within the members' commitments ([dep-05](DEP-05.md) §Quorum expiry).
 - **they are constructions and member policy, not judgments:**
   - the rotation and confiscation anchors and fee ladders, and their fees ([dep-03](DEP-03.md)), are built the same under every ruleset; only `anchor-ladder-v5`'s vault-spend rules judge them;
