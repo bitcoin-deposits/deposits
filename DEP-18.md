@@ -39,6 +39,7 @@ the registry is append-only. each entry names a reserves-cascade family and the 
 | `anchor-ladder-v5` | `cltv-offset-v2` | the rules listed under §anchor-ladder-v5 |
 | `balance-anchor-v6` | `cltv-offset-v2` | `anchor-ladder-v5`'s rules plus `MissingBalanceCommitment` (§balance-anchor-v6) |
 | `grounded-arms-v7` | `cltv-offset-v2` | `balance-anchor-v6`'s rules plus grounded arms (§grounded-arms-v7) |
+| `strict-lottery-v8` | `cltv-offset-v2` | `grounded-arms-v7`'s rules plus the strict lottery (§strict-lottery-v8). **Draft: not frozen**, it may still gain a rule on the lottery's recovery voters |
 
 before this section existed, the pre-release registry was amended in place: the tier-1 minority (2026-10-02), and the rules of october 2026, which went in as rules of every ruleset. from 2026-10-29 the entries above are frozen. a change to what a named ruleset enforces is a new name.
 
@@ -60,6 +61,14 @@ it does not include `balance-commit-v4`'s `MissingBalanceCommitment`. a ledger t
 ### grounded-arms-v7
 
 `grounded-arms-v7` is `balance-anchor-v6`'s five rules plus **grounded arms** ([dep-03](DEP-03.md) §Grounded arms): an arm counts in the eligibility cut, and so in the lottery, only if its fork's `DisputeEnter` has grounds, an expiry ground or a proven one carried on the fork as `fraud_proof` (DEP-02 TLV 345). It is in the `cltv-offset-v2` family, so a ledger moves to it by `QuorumUpgrade` or `QuorumBegin`. It changes which confiscations are authorised ([dep-06](DEP-06.md) §Authorised confiscation): under an earlier ruleset a confiscation whose lottery includes an arm without grounds is authorised, and under this one it is not. That is a rule that convicts, so it holds only from this ruleset on and never judges a dispute whose fork point is under an earlier one. Motive is never examined: a member may arm on another's grounds by citing them in its own `DisputeEnter`.
+
+### strict-lottery-v8
+
+**Draft, not yet frozen** (2026-11-05): its contents may still grow before the entry is frozen; a node declaring it declares the draft's rules as written here.
+
+`strict-lottery-v8` is `grounded-arms-v7`'s rules plus the **strict lottery** ([dep-03](DEP-03.md) §The accused never win): a confiscation whose lottery includes a key in `Accused(grounds)` (the operator at the fork point, and every key the dispute's grounded `DisputeEnter`s' proofs convict) is not authorised ([dep-06](DEP-06.md) §Authorised confiscation). It is not a confiscation answer, so it is challenged and, unanswered, proven as an `UnauthorizedVaultSpend` against its witness signers. Like grounded arms it is judged under the ruleset in force at the dispute's fork point. In the `cltv-offset-v2` family, so a ledger moves to it by `QuorumUpgrade` or `QuorumBegin`.
+
+Under every earlier ruleset the exclusion is how builders and cosigners build, but a judge also accepts a lottery that includes an accused key (it is the cut of a subset of the arms), so the clarification of 2026-11-04 never convicts history. That leniency is exploitable: a guilty majority could confiscate a ledger into a lottery of its own colluders, sign it, and never claim, stranding the ledger's lottery output with the depositors' recourse behind it. Under this ruleset that confiscation is itself a theft. Vector: the `judge` cases of `lottery_accused.txt` (`lottery_admissible` / `lottery-admissible-p`).
 
 ### which ruleset judges what
 
@@ -148,11 +157,11 @@ corollary: deploying a binary that knows a new ruleset is always safe regardless
 
 which ruleset an operator names is not consensus. the reference policy, which both implementations follow:
 
-1. **name `grounded-arms-v7`** when every member of the quorum being seated declares it, else **`balance-anchor-v6`** when every member declares that. each carries every rule of the rulesets before it, so no ledger loses one by moving. a new ledger's `LedgerOpen` names `grounded-arms-v7`.
-2. **otherwise keep what protects more.** an operator whose ledger is on `balance-commit-v4` names `balance-commit-v4` again, and never proposes a `QuorumUpgrade` away from it except to `balance-anchor-v6` or `grounded-arms-v7`: `anchor-ladder-v5` lacks `MissingBalanceCommitment`, so moving there would silently drop a rule the depositors had.
+1. **name `strict-lottery-v8`** when every member of the quorum being seated declares it, else **`grounded-arms-v7`**, else **`balance-anchor-v6`** when every member declares that. each carries every rule of the rulesets before it, so no ledger loses one by moving. a new ledger's `LedgerOpen` names `strict-lottery-v8`.
+2. **otherwise keep what protects more.** an operator whose ledger is on `balance-commit-v4` names `balance-commit-v4` again, and never proposes a `QuorumUpgrade` away from it except to `balance-anchor-v6` or `grounded-arms-v7` or `strict-lottery-v8`: `anchor-ladder-v5` lacks `MissingBalanceCommitment`, so moving there would silently drop a rule the depositors had.
 3. **otherwise move to `anchor-ladder-v5`** when every member declares it, and keep the current ruleset when one does not.
 4. **a consent request proposes only what its member is known to support.** the `chosen_ruleset` of a `consent_request` is a proposal, not the choice: the `QuorumBegin` names its ruleset by 1–3 over every member's fresh declaration. a member may refuse a proposal it does not support, and every release before `balance-anchor-v6` does. so the operator proposes the target of 1–3 for that member alone when the member's last signed declaration on this ledger (staged, else seated) lists it, and otherwise the ledger's current ruleset (a ledger with neither a ruleset nor a seated quorum: the target of 1), else `cltv-offset-v2`. the member's response still declares everything it supports, so a quorum whose members have all upgraded moves to the target at the `QuorumBegin` that follows. (signet soak, 2026-10-30, a stochastic deploy: upgraded cl operators proposed `balance-anchor-v6` to reference members still on the previous release, which refused, and the rotations of G and I failed for as long as the versions were mixed.) vector: the `propose` cases of `ruleset_naming.txt`.
-5. all five registered rulesets past `cltv-offset-v2` share its family, so every move above is available to a `QuorumUpgrade` as well as a `QuorumBegin`; the policy, not the family, decides which. vector: the `plan` cases of `ruleset_naming.txt`.
+5. all six registered rulesets past `cltv-offset-v2` share its family, so every move above is available to a `QuorumUpgrade` as well as a `QuorumBegin`; the policy, not the family, decides which. vector: the `plan` cases of `ruleset_naming.txt`.
 
 ## downgrade, stall, and emergency paths
 

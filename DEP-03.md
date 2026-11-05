@@ -449,7 +449,10 @@ window reopens as below. Builders propose, and cosigners sign, only the lottery 
 confiscation whose lottery includes an accused key, built before this rule was written down, is
 still authorised (DEP-06 §Authorised confiscation: the lottery may be over the cut of any subset
 of the arms, and the clarified set is one such subset), so the rule never convicts anyone and holds
-under every ruleset (DEP-18). Vector: `lottery_accused.txt`. (Signet soak, 2026-11-04: colluder
+under every ruleset (DEP-18). Under `strict-lottery-v8` (DEP-18, judged at the fork point) that
+leniency ends: a confiscation whose lottery includes an accused key is not authorised (DEP-06), so
+a guilty majority cannot confiscate a ledger into a lottery of its own colluders and leave it
+unclaimed. Vector: `lottery_accused.txt` (its `judge` cases for the strict lottery). (Signet soak, 2026-11-04: colluder
 cld26 cosigned an invalid credit, was proven for it, armed the dispute and won custody.)
 
 **Eligibility snapshot.** For each armer take its latest `DisputeArmed` (highest sequence on its
