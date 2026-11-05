@@ -80,6 +80,7 @@ these went in as rules of every ruleset and stay there. none can make history re
   - a `quorum_expired` dispute does not freeze cosigning, and ends on re-establishment;
   - a dispute's ground is read from its record;
   - a nonce need only be unique within its window ([dep-17](DEP-17.md));
+  - a lapsed spend challenge is proven only by a judge that could read where answers go, and is no verdict otherwise ([dep-06](DEP-06.md) §Spend challenge, 2026-11-05);
   - a key the dispute's own grounds convict is never a lottery participant ([dep-03](DEP-03.md) §The accused never win, 2026-11-04). It was always implicit (the operator "cannot dispute its own ledger"; a cosigner of the fault is complicit, [dep-05](DEP-05.md)), and the clarified lottery is the cut of a subset of the arms, which every judge already accepts, so a confiscation built either way stays authorised.
 - **they apply only to operations or fields that did not exist before:**
   - [dep-20](DEP-20.md) exits, dormancy and migration;

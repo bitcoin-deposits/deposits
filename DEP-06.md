@@ -128,6 +128,8 @@ where `spend_block_hash` is the 32 raw bytes of the confirming block. The proof 
   spend's confirming height, and `w` is the spent ledger's `service_response_blocks` (the largest
   a seated member of the governing `QuorumBegin` declared, 72 if none). A verifier that knows an
   answer to the challenge (§Spend challenge), found anywhere and at any time, rejects the proof.
+  A verifier that finds none accepts it only if it could read every place answers go
+  (§Spend challenge, "A lapse is judged where answers are read"); otherwise it reaches no verdict.
   An answer is positive evidence, so whoever holds one can always rebut; the window only bounds how
   long silence is tolerated.
 
@@ -169,6 +171,20 @@ tagged with the spent ledger: the spent ledger's operator and members watch for 
 When a block at `start + w` (above) is on the judge's chain and it still knows no answer, the
 challenge has lapsed and the judge proves the spend in the lapsed form; that proof, like an
 unanchored one, is what may start disputes (DEP-19 §6). A judge challenges a spend once.
+
+**A lapse is judged where answers are read.** A lapse asserts that no answer exists, which only a
+judge that can read where answers go may say. At the moment it publishes a lapsed proof, or enters
+or arms on one, a node MUST have re-read every place this section says answers go (the relays it
+reads: the spent ledger's updates and the Challenge Answer events published to it; and its own
+store) and found no answer. A node that cannot read them (no relay answers it, or none holds the
+spent ledger) reaches no verdict: it publishes nothing, keeps the challenge owed and judges it again
+later, as a judge that cannot read the relay does for any spend. A verifier receiving a lapsed proof
+does the same before accepting it. This holds under every ruleset (DEP-18): it only narrows what
+convicts. (Regtest `confiscation-answer`, 2026-11-04: a judge that followed the base ledger but read
+nothing of it on the relay challenged a confiscation, could not rebuild it from the answer, which
+carries only the dispute's updates, without the base chain, and proved an honest lottery participant
+when the window closed. Both implementations now rebuild from the judge's own base chain plus the
+answer.) Vector: `vault_spend_anchor.txt` (`judge` lines).
 
 What an answer is not. A child of `H` that is not a rotation naming the spend proves nothing about
 the spend's signers: it is exactly what an honest confiscation looks like (the operator's own next
