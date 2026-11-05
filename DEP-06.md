@@ -314,7 +314,13 @@ it takes custody without a draw.
             for i in 0..m:  OP_DUP <i> OP_EQUAL OP_IF OP_DROP <pk_{s_i}> OP_CHECKSIG OP_ELSE
             OP_DROP OP_0  m × OP_ENDIF
 
-`v_0 … v_{r-1}` are the recovery voters sorted by x-only key and T the recovery threshold. **The recovery voters** are the members, other than the original operator (the author of sequence 0), of the `QuorumBegin` governing the confiscated vault: the latest `QuorumBegin` authored by the original operator at a sequence ≤ the dispute's fork point (the lowest `last_valid_sequence` any `DisputeEnter` names). Later `QuorumBegin`s (past the fork point, or on any fork) do not count. T = ⌊r/2⌋ + 1. Every implementation derives the lottery address from this set (vector `lottery_recovery_voters.txt`); the
+`v_0 … v_{r-1}` are the recovery voters sorted by x-only key and T the recovery threshold. **The recovery voters** are the members, other than the original operator (the author of sequence 0), of the `QuorumBegin` governing the confiscated vault: the latest `QuorumBegin` authored by the original operator at a sequence ≤ the dispute's fork point (the lowest `last_valid_sequence` any `DisputeEnter` names). Later `QuorumBegin`s (past the fork point, or on any fork) do not count. T = ⌊r/2⌋ + 1. *Under `strict-lottery-v8` (provisional, review):* the recovery voters are those members minus every
+key in Accused(grounds) (DEP-03 §The accused never win), and r, T and every tier threshold are
+computed over that reduced set by the same rules (T = ⌊r/2⌋ + 1; tiers T, T−1, T−2, 1, each at least
+1). If no voter remains, the whole quorum is accused: the lottery has only its full-set leaf (or the
+sole participant's signature leaf), so only the all-revealed claim works and any other outcome
+strands. That is accepted, since no honest voter exists to attest a subset or move the output.
+Vector `lottery_voters_accused.txt`. Every implementation derives the lottery address from this set (vector `lottery_recovery_voters.txt`); the
 sum is below 64·m, so six conditional subtractions reduce it mod m. Witness, bottom to top:
 `winner_sig, preimage_{s_{m-1}} … preimage_{s_0}, [voter_sig_{r-1} … voter_sig_0], leaf, control`
 (an absent voter signature is the empty push).
