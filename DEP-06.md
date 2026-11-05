@@ -364,6 +364,35 @@ destination other than the re-arm round's lottery output; such a spend is an una
 of disputed funds. *(Implementation status: neither implementation orchestrates the re-arm round
 yet; both refuse to sign any other recovery spend, so the output waits.)*
 
+**The re-arm round, deterministically (draft, 2026-11-05).** Every honest voter must rebuild the
+same recovery spend byte for byte, so the round is fixed by public state alone:
+
+1. *When.* Let `L` be the unspent lottery output, confirmed at height `h_L` (the confiscation's
+   block for round 1, the previous recovery spend's for a later round), and `h_D = h_L + 72` its
+   reveal deadline. The round opens at `h_D` iff no participant's valid reveal (hashing to its
+   commitment) is on the relay or in a claim witness. A voter that cannot read the relay reaches no
+   verdict, as for a lapse (§Spend challenge).
+2. *Its arms.* The `DisputeArmed` updates on the dispute's forks whose signed `block_height` lies in
+   `(h_D, h_D + dispute_arm_blocks]`, each armer's latest one there, counted against the same
+   four-arm bound as round 1 (DEP-03 §Eligibility snapshot). An armer that arms in a round must commit
+   a fresh preimage; the eligibility snapshot, its `E`, the pledge floor, grounded arms and the
+   accused exclusion (DEP-03 §The accused never win) apply to these arms exactly as to round 1's.
+3. *Its lottery.* `L'` is built as round 1's lottery is, over the round's cut, with the same recovery
+   voters and threshold. If the cut is empty, the round's window reopens once as in DEP-03
+   §"No participant"; when no armer has an arm left within the bound, `L` stays unspent (the residual
+   risk of a dispute every member abandons).
+4. *The spend.* Version 2, nLockTime 0, one input (`L`, nSequence 144, the recovery leaf of the tier
+   its signers satisfy), one output (`L'`'s scriptPubKey) worth `L`'s value less the fee: the
+   reference feerate of the confiscated vault's governing `QuorumBegin` (as the confiscation's,
+   DEP-03 §Confiscation fee) times the spend's vsize. No anchor and no change. Voters sign only this
+   transaction, rebuilt from their own view.
+5. *Then* reveals and the claim run against `L'` as in Phase 3 and above, with `h_L` the recovery
+   spend's block. A round whose participants again all withhold opens the next round the same way.
+
+The armer share slices follow `L` into `L'` (§Sweep recipients). Open question: whether a lottery
+whose revealers R are non-empty, but whose winner never claims, also opens a re-arm round once the
+CSV-144 recovery leaf is spendable. Vector: none yet.
+
 **Influence and bias.**
 - *Last revealer:* a participant can still choose between revealing (draw over R) and withholding
   (draw over R without it), one bit of influence per withholder; it can never steer the draw to
