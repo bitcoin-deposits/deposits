@@ -389,9 +389,16 @@ same recovery spend byte for byte, so the round is fixed by public state alone:
 5. *Then* reveals and the claim run against `L'` as in Phase 3 and above, with `h_L` the recovery
    spend's block. A round whose participants again all withhold opens the next round the same way.
 
-The armer share slices follow `L` into `L'` (§Sweep recipients). Open question: whether a lottery
-whose revealers R are non-empty, but whose winner never claims, also opens a re-arm round once the
-CSV-144 recovery leaf is spendable. Vector: none yet.
+The armer share slices follow `L` into `L'` (§Sweep recipients).
+
+*Unclaimed with revealers (provisional, review).* A lottery whose revealers R are non-empty but
+whose output is still unspent when the CSV-144 recovery leaf becomes spendable (`h_L + 144`) also
+opens a re-arm round, by the steps above with `h_D` replaced by `h_L + 144`. Otherwise a winner that
+never claims, or that yielded by mistake (soak, 2026-11-04: ledger 30ea46ac's sole participant
+yielded its own custody), strands the ledger with its depositors' balances. Recorded for review in
+cl-deposits `docs/REVIEW.md`.
+
+Vector: `rearm_spend.txt` (the recovery spend's bytes and fee).
 
 **Influence and bias.**
 - *Last revealer:* a participant can still choose between revealing (draw over R) and withholding
