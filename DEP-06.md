@@ -381,11 +381,17 @@ same recovery spend byte for byte, so the round is fixed by public state alone:
    voters and threshold. If the cut is empty, the round's window reopens once as in DEP-03
    §"No participant"; when no armer has an arm left within the bound, `L` stays unspent (the residual
    risk of a dispute every member abandons).
-4. *The spend.* Version 2, nLockTime 0, one input (`L`, nSequence 144, the recovery leaf of the tier
-   its signers satisfy), one output (`L'`'s scriptPubKey) worth `L`'s value less the fee: the
-   reference feerate of the confiscated vault's governing `QuorumBegin` (as the confiscation's,
-   DEP-03 §Confiscation fee) times the spend's vsize. No anchor and no change. Voters sign only this
-   transaction, rebuilt from their own view.
+4. *The spend.* Version 2, nLockTime 0, one input (`L` through the recovery leaf of tier t, with
+   nSequence that tier's CSV: 144, 1008, 4032 or 8064), one output (`L'`'s scriptPubKey) worth `L`'s
+   value less the fee. No anchor and no change. The proposer names t, the lowest tier whose CSV has
+   elapsed at its height; voters sign only this transaction, rebuilt from their own view.
+   *Fee:* the reference feerate of the confiscated vault's governing `QuorumBegin` (as the
+   confiscation's, DEP-03 §Confiscation fee; 2 sat/vB when none is recorded) times the vsize
+   ⌈(4·94 + W)/4⌉, where W counts the witness exactly as signed by the tier's threshold `th` of `r`
+   voters: 2 (marker, flag) + 1 (item count) + the signature items (`th` = 1: one 65-byte item;
+   otherwise `r` items, `th` of them 65 bytes and the rest the 1-byte empty push) + the leaf and the
+   control block, each with its compact-size length prefix. 94 is the transaction's non-witness size
+   with one P2TR output. Vector: `rearm_spend.txt`.
 5. *Then* reveals and the claim run against `L'` as in Phase 3 and above, with `h_L` the recovery
    spend's block. A round whose participants again all withhold opens the next round the same way.
 
