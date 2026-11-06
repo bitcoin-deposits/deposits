@@ -418,6 +418,7 @@ stay valid. See DEP-10 §"Operator-direct pay" for the settlement model.
 | 120 | new_reserves_address | variable | DisputeAcquire |
 | 112 | commitment_hash | 20 | DisputeArmed (HASH160) |
 | 122 | target_reserves | variable | DisputeArmed |
+| 366 | rearm_round | 4 | DisputeArmed (u32; DEP-06 Phase 4 re-arm round, absent = 1; strict-lottery-v8, provisional) |
 
 Field IDs 106 (entropy_block_hash) and 116 (entropy_block_height) were used by an earlier entropy-block-based DisputeAcquire shape and are now retired. Selection moved to an on-chain Tapscript lottery (see DEP-03 §"Custody Lottery"); `claim_txid` records the on-chain spend that proves the script-determined winner.
 

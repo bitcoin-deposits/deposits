@@ -367,8 +367,9 @@ a **new lottery output for a fresh arm round** over the same ledger: a new `Disp
 under the DEP-03 eligibility rule and its re-arm bound, after which the same claim rules apply.
 Honest voters MUST NOT sign a recovery spend that pays the accused operator, or that pays any
 destination other than the re-arm round's lottery output; such a spend is an unauthorised spend
-of disputed funds. *(Implementation status: neither implementation orchestrates the re-arm round
-yet; both refuse to sign any other recovery spend, so the output waits.)*
+of disputed funds. *(Implementation status, 2026-11-05: cl-deposits orchestrates the round (arming, the voters'
+`lottery_rearm_sign`, the spend, reveal and claim); deposits-rust folds round-tagged arms but does not
+yet orchestrate a round, nor sign its spend.)*
 
 **The re-arm round, deterministically (draft, 2026-11-05).** Every honest voter must rebuild the
 same recovery spend byte for byte, so the round is fixed by public state alone:
@@ -378,11 +379,20 @@ same recovery spend byte for byte, so the round is fixed by public state alone:
    reveal deadline. The round opens at `h_D` iff no participant's valid reveal (hashing to its
    commitment) is on the relay or in a claim witness. A voter that cannot read the relay reaches no
    verdict, as for a lapse (§Spend challenge).
-2. *Its arms.* The `DisputeArmed` updates on the dispute's forks whose signed `block_height` lies in
+2. *Its arms.* The `DisputeArmed` updates on the dispute's forks that carry `rearm_round = r` (TLV
+   366, DEP-02; round 1's arms carry none) and whose signed `block_height` lies in
    `(h_D, h_D + dispute_arm_blocks]`, each armer's latest one there, counted against the same
-   four-arm bound as round 1 (DEP-03 §Eligibility snapshot). An armer that arms in a round must commit
-   a fresh preimage; the eligibility snapshot, its `E`, the pledge floor, grounded arms and the
-   accused exclusion (DEP-03 §The accused never win) apply to these arms exactly as to round 1's.
+   four-arm bound as round 1 (DEP-03 §Eligibility snapshot), which spans every round. An armer that
+   arms in a round must commit a fresh preimage; the eligibility snapshot, its `E`, the pledge floor,
+   grounded arms and the accused exclusion (DEP-03 §The accused never win) apply to these arms
+   exactly as to round 1's.
+
+   *The fold (provisional, review; vector `dispute_rearm.json`).* A `DisputeArmed` whose
+   `rearm_round` is above the fork's last arm's round starts that round: it is valid on a fork that
+   is disputed, armed or yielded, with a new `commitment_hash`, since a `DisputeYield` ends a round,
+   not the dispute. A `DisputeArmed` for a lower round than the fork's last is non-conforming. Within
+   a round the DEP-03 re-arm rule holds unchanged: the commitment repeats, and a yielded fork takes no
+   further arm of that round. A fork whose `DisputeAcquire` stands takes none.
 3. *Its lottery.* `L'` is built as round 1's lottery is, over the round's cut, with the same recovery
    voters and threshold. If the cut is empty, the round's window reopens once as in DEP-03
    §"No participant"; when no armer has an arm left within the bound, `L` stays unspent (the residual
