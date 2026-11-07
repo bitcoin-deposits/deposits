@@ -395,8 +395,36 @@ same recovery spend byte for byte, so the round is fixed by public state alone:
    further arm of that round. A fork whose `DisputeAcquire` stands takes none.
 3. *Its lottery.* `L'` is built as round 1's lottery is, over the round's cut, with the same recovery
    voters and threshold. If the cut is empty, the round's window reopens once as in DEP-03
-   §"No participant"; when no armer has an arm left within the bound, `L` stays unspent (the residual
-   risk of a dispute every member abandons).
+   §"No participant".
+
+   *Recurring windows (strict-lottery-v8, ruled 2026-11-07).* While `L` is unspent, a round's arm
+   windows recur. With `o` the round's opening height (`h_D` above), `w` its `dispute_arm_blocks`,
+   and the period `k = 144·⌈(2w + 1)/144⌉` (the least multiple of 144 above `2w`; 144 for any
+   `w ≤ 71`), window `j` is:
+
+   - `j = 0`: `(o, o + w]` (the scheduled window);
+   - `j = 1`: `(o + w, o + 2w]` (its one reopening);
+   - `j ≥ 2`: `(o + (j − 1)·k, o + (j − 1)·k + w]`.
+
+   The round's window is the first `j`, in order, whose cut (step 2, evaluated over that window
+   alone) is non-empty. The recovery spend is due once that window has closed. Arms signed between
+   windows belong to none, but still count against the four-arm bound, which spans every window and
+   every round. Every voter derives `o`, `w`, `k` and each window's cut from public state (the
+   lottery output's block, the relay's reveals and arms, and chain state at each window's close), so
+   all of them agree on `j` without coordinating.
+
+   *Why this `k`.* The first recurring window opens at `o + k ≥ h_L + 72 + 144`. That is after the
+   reveal deadline (`h_L + 72`) and after the CSV-144 recovery leaf opens (`h_L + 144`, the claim
+   window for revealers in the unclaimed case below). So a recurring window never runs while a reveal
+   is pending, and the spend can follow its close at once. `k > 2w` keeps every recurring window
+   clear of the scheduled window and its reopening, and of the next recurring window. A multiple of
+   144 keeps windows on the CSV-144 cadence.
+
+   A lottery is therefore never stranded for want of a window: it stays unspent only while no armer
+   has an arm left within the bound, which is the residual risk of a dispute every member abandons.
+   That risk ends at the vault's post-expiry tiers (DEP-05 §Lifecycle). A lottery that stranded
+   before this rule was deployed re-arms at its next recurring window.
+   Vector: `rearm_windows.json`.
 4. *The spend.* Version 2, nLockTime 0, one input (`L` through the recovery leaf of tier t, with
    nSequence that tier's CSV: 144, 1008, 4032 or 8064), one output (`L'`'s scriptPubKey) worth `L`'s
    value less the fee. No anchor and no change. The proposer names t, the lowest tier whose CSV has
