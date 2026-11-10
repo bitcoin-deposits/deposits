@@ -163,7 +163,13 @@ The ledger's vault is output 0 of the rung that confirmed. Every implementation 
 the chain the same way: the rung whose output 0 exists on its chain (unspent, or spent by a later
 confirmed transaction). Only one can confirm, since all spend the same outpoint; before one confirms
 the vault is pending at all of them. A spend of the vault names its outpoint, so a judge of a later
-spend reads the rung from the spending input without a chain lookup.
+spend reads the rung from the spending input without a chain lookup, and the vault's value from that
+input's prevout (BIP-341 signatures commit to every input's amount), which is rung i's output 0. A
+judge MUST NOT read the rung from the unspent output set: once the vault is spent it holds no rung,
+and a fall back to rung 0's recorded amounts rebuilds a confiscation of a bumped vault `1000 × Δ_i`
+msats off, so the judge challenges an authorised spend (signet soak, 2026-11-08: ledger G, `Δ = 6076`
+sats; its lapse convicted the three members that signed the confiscation). This only ever excuses
+(a rebuild that matches), so it holds under every ruleset (DEP-18).
 
 ### Reference feerate
 

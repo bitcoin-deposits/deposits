@@ -336,7 +336,13 @@ depth d and the rest at d-1. At k = 7 that is 131 leaves, depth 8, a 289-byte co
 Once a rung of the confiscation confirms (DEP-03 §Confiscation ladder), each participant publishes a `CustodyLotteryReveal`
 event (Nostr Kind 9106) carrying their preimage, within `LOTTERY_REVEAL_CSV = 72` blocks of the
 confiscation's confirmation (the reveal deadline). The signature on the reveal binds
-`(ledger_id, preimage)` to the participant's identity.
+`(ledger_id, preimage)` to the participant's identity. A participant MUST NOT reveal while no rung
+has confirmed (a rung in the mempool is not a confirmation): two proposers may race confiscations
+over different cuts of the arms (any subset counted as of the confiscation's block is valid), and a
+preimage published before one confirms lets a proposer choose the cut that makes it win. It SHOULD
+wait a few confirmations (deposits-rust and cl-deposits wait 3) so a reorg cannot swap in a competing
+cut either; the deadline leaves room for that (signet soak, 2026-11-08: four confiscations revealed
+from the mempool never confirmed).
 
 #### Phase 4: Claim and Settlement (DisputeAcquire)
 
