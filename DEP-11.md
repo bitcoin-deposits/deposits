@@ -42,6 +42,15 @@ The operator should append a new `QuorumBegin` before `quorum_expiry` to keep th
 
 A post-expiry `QuorumBegin` itself is **not** non-conforming: it is the operator's degraded self-rescue path, valid at the tier-keyed cosignature threshold in DEP-05 §Lifecycle. Successfully appending such a `QuorumBegin` (and confirming the matching on-chain rotation TX) resets the lifecycle and re-opens normal value-moving operation.
 
+**Rotating without a silent member** (every ruleset; it judges nothing; ruled 2026-11-10: "permissionless means letting people gfy"). A member's consent is needed only to seat it. No rule asks an operator to wait for a member it does not re-seat, and an operator MUST NOT let one silent member expire its whole quorum:
+
+- **Who chooses:** the operator. The new quorum is exactly the set its `QuorumBegin` seats. Members do not compute it; they validate that `QuorumBegin` as any other (DEP-05: its size, its cosignature threshold under the *current* quorum, each seated member's `QuorumAddMember`, the expiry bound). Nothing requires a member of the old quorum to appear in the new one, and a validator MUST NOT refuse a `QuorumBegin` for leaving one out.
+- **When:** an operator asks every member it means to re-seat for a fresh `QuorumAddMember` from its rotation margin on (local policy). From `drop_margin` blocks before `quorum_expiry` (local policy; the suggested default is half the rotation margin, and at least 72 blocks), it stops waiting: it rotates with the members whose consent it holds, and it drops a member whose consent has not arrived. A drop needs no fault: silence is not non-conforming (§Co-signing), it only costs the member its seat.
+- **Size:** the new quorum is the largest valid size (DEP-05 §Size policy: 3, 5 or 7) the consenting members allow. With more consents than that size, the operator keeps the members already seated first (continuity), then candidates in the order they consented, and removes the rest from the staged set (`QuorumRemoveMember`). It MAY recruit replacements (candidates that consent) to reach a larger size.
+- **Minimum:** fewer than three consenting members seat no quorum. The ledger then runs into the expiry cascade (DEP-05 §Lifecycle), where the degraded tiers let the remaining members rotate, or confiscate respectfully.
+
+(Signet soak, 2026-11-07: every rotation of ledger A waited on cld2's consent, which never arrived in time, for five hours; A's quorum expired, and so did ten others behind it.)
+
 ## Quorum Member Obligations
 
 ### Co-signing

@@ -70,6 +70,8 @@ it does not include `balance-commit-v4`'s `MissingBalanceCommitment`. a ledger t
 
 Under every earlier ruleset the exclusion is how builders and cosigners build, but a judge also accepts a lottery that includes an accused key (it is the cut of a subset of the arms), so the clarification of 2026-11-04 never convicts history. That leniency is exploitable: a guilty majority could confiscate a ledger into a lottery of its own colluders, sign it, and never claim, stranding the ledger's lottery output with the depositors' recourse behind it. Under this ruleset that confiscation is itself a theft. Vector: the `judge` cases of `lottery_accused.txt` (`lottery_admissible` / `lottery-admissible-p`).
 
+It also reads two member rules more strictly (ruled 2026-11-10), judged under the ruleset of the ledger's latest `QuorumBegin` ([dep-05](DEP-05.md) §Deposed operator): **a rotation does not end a fraud dispute** (only an expiry ground is answered by a fresh quorum), and **custody moves only on a confirmed claim** (a `DisputeAcquire` binds once its `claim_txid` confirms, [dep-06](DEP-06.md) §Phase 4). Vector: `cosign_refusal.json` (the `strict-lottery-v8` cases).
+
 It also carries the **re-arm round** of an unclaimed lottery ([dep-06](DEP-06.md) Phase 4): the recovery voters spend an unclaimed lottery output into a fresh arm round's lottery, and that round's arm windows **recur** every `k = 144·⌈(2w+1)/144⌉` blocks while the output is unspent, within the four-arm bound (ruled 2026-11-07), so a lottery is never stranded for want of a window. Vectors: `rearm_spend.txt`, `rearm_windows.json`.
 
 ### which ruleset judges what

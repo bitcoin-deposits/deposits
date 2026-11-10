@@ -367,6 +367,18 @@ The winner then:
 
 Losers append `DisputeYield` to their forks, transitioning them to Tombstoned state. Only the winner's fork continues as the canonical ledger.
 
+**An acquire binds once its claim confirms** (`strict-lottery-v8`, DEP-18; ruled 2026-11-10). A
+`DisputeAcquire` is a statement about the chain: its `claim_txid` spent the lottery output. Until
+that transaction is confirmed, the acquire moves nothing: no member reads custody as moved
+(DEP-05 §Deposed operator), no loser yields to it, and the lottery is still live, so its reveals,
+claims and re-arm rounds go on as if the acquire were absent. A winner appends its acquire after
+broadcasting, as above, and others judge it when the claim confirms. One whose claim never
+confirms (a restart, a double spend by a later claim or a re-arm) binds nothing, however long it
+stays on the fork. Literal means confirmed, as for every spend a member judges: a transaction in the
+mempool can still be replaced. (Signet soak, 2026-11-07: cld7's fork of
+751e6951 carried a `DisputeAcquire` for a claim that never reached the chain, and its fellows read
+it as the dispute's end.)
+
 **Nobody revealed** (R empty at the deadline): no claim leaf is satisfiable. The recovery quorum
 spends the lottery output through the CSV-144 recovery leaf (or a later tier if fewer sign) into
 a **new lottery output for a fresh arm round** over the same ledger: a new `DisputeArmed` round

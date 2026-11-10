@@ -175,6 +175,21 @@ Quorum members must maintain a full state replica of any ledger they co-sign for
   after the latest `QuorumBegin`, for any reason other than `quorum_expired`, or
 - **a majority of the quorum** (`floor(n/2) + 1` of the current members) has entered such a dispute.
 
+Under `strict-lottery-v8` (DEP-18; judged under the ruleset of the ledger's latest `QuorumBegin`)
+two of these read differently:
+
+- **A rotation does not end a fraud dispute.** A dispute on any ground other than
+  `quorum_expired` freezes co-signing whatever its `last_valid_sequence`: a later `QuorumBegin`
+  does not scope it away. Only an expiry ground is answered by a fresh quorum (§When a
+  `quorum_expired` dispute ends); a fraud ground stands until its dispute resolves (DEP-06). A
+  rotation cosigned by members who never disputed would otherwise lift the freeze on an operator
+  the disputants proved at fault (ruled 2026-11-10: "no"). A member that entered a fraud dispute
+  never again extends that operator's chain: there is no retraction.
+- **Custody moves only on a confirmed claim.** A `DisputeAcquire` counts only once its
+  `claim_txid` is confirmed on chain (DEP-06 §Claiming). One whose claim is unconfirmed, or never
+  reached the chain, deposes no one; a member reads it again as the chain changes (ruled
+  2026-11-10: "yes").
+
 A dispute counts in every state it reaches (open, armed, yielded or acquired). A `quorum_expired`
 dispute does **not** freeze co-signing: it is respectful, and the operator's re-establishment
 (`QuorumBegin`, DEP-05 §Lifecycle) is exactly the update its members must still be able to sign.
@@ -183,7 +198,8 @@ member came to it: from its own expiry watch, or from a `QuorumExpired` proof (D
 Its `DisputeEnter` carries reason `quorum_expired`, never a generic reason a peer would count as
 freezing. (Signet soak, 2026-10-23: reference members disputed two expired cl ledgers on a received
 `QuorumExpired` proof with the reason `auto_dispute`, froze, and the ledgers could never rotate.)
-Implementations agree on the cases in the shared vector `cosign_refusal.json`.
+Implementations agree on the cases in the shared vector `cosign_refusal.json` (its `ruleset` and
+`acquire_confirmed` fields carry the `strict-lottery-v8` readings).
 
 **The ground of a dispute.** A `DisputeEnter`'s `reason` names its ground: `quorum_expired`, or the
 DEP-06 proof type it rests on in snake_case (`non_conforming_update`, `equivocation`,
