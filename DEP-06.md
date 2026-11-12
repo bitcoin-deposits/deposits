@@ -410,7 +410,13 @@ same recovery spend byte for byte, so the round is fixed by public state alone:
    is disputed, armed or yielded, with a new `commitment_hash`, since a `DisputeYield` ends a round,
    not the dispute. A `DisputeArmed` for a lower round than the fork's last is non-conforming. Within
    a round the DEP-03 re-arm rule holds unchanged: the commitment repeats, and a yielded fork takes no
-   further arm of that round. A fork whose `DisputeAcquire` stands takes none.
+   further arm of that round. A fork whose `DisputeAcquire` stands takes none. Under
+   `strict-lottery-v8` (`acquire-on-confirm`, ruled 2026-11-10) a `DisputeAcquire` binds only once its
+   claim confirms. A confirmed claim spent the lottery output, so no later round could exist. A fork
+   that armed and then published a `DisputeAcquire` therefore takes a later round's arm: the fold
+   treats it as yielded. The acquire's claim never landed, or there would be no round to arm. Under
+   earlier rulesets the acquire closes the fork as before. (Signet soak, 2026-11-11: cld7's
+   unconfirmed acquire on 751e6951 kept round 2 from ever arming.)
 3. *Its lottery.* `L'` is built as round 1's lottery is, over the round's cut, with the same recovery
    voters and threshold. If the cut is empty, the round's window reopens once as in DEP-03
    §"No participant".
