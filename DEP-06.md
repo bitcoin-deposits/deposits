@@ -651,6 +651,24 @@ the input of a confiscation lottery output (confiscation won).
 Wallets verifying ledger continuity reconcile against whichever
 appears on-chain.
 
+**Confirmed decides; pledges lapse with the loser** (ruled 2026-11-14). The race is judged on
+*confirmed* spends only, as every spend a member judges is: a confiscation in the mempool does not
+make a re-establishment invalid, and a rotation in the mempool does not end a dispute.
+
+- *Re-establishment confirmed first.* Its `QuorumBegin` (after the dispute's fork point) ends every
+  `quorum_expired` dispute on the ledger (DEP-05 §When a `quorum_expired` dispute ends). Each
+  disputant yields, armed or not, and every pledge and arm made for the dispute lapses: no
+  confiscation, no lottery, no claim, and no loss to the pledger, whose replacement collateral is
+  free again. A confiscation transaction for it, if any was signed, double-spends a spent vault and
+  never confirms.
+- *Confiscation confirmed first.* The vault is gone, so no rotation of it can be spent, and a member
+  MUST NOT cosign a `QuorumBegin` that names it as its predecessor. The dispute runs on through its
+  lottery (§Phase 4).
+
+Members are never obliged to take part in a re-establishment (DEP-05 §A rotation past expiry is
+allowed, never owed), so a re-establishment that gathers too few consents or cosignatures is simply
+not formed, and the confiscation path stays open. Vector: `post_expiry_rotation.json`.
+
 The cascade is not "first to act in a tier wins"; it is "first tier
 opens, both options simultaneously become valid." At Tier 1
 (`quorum_expiry + 720`), the operator and a minority of cosigners can

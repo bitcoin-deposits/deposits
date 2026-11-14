@@ -218,7 +218,10 @@ after the label rule above was fixed, because the records were older than the fi
 its `last_valid_sequence`. Re-establishment answers exactly that ground: once the operator's chain
 holds a `QuorumBegin` after the dispute's `last_valid_sequence`, the dispute is over unless its
 confiscation already confirmed (DEP-06 §Race). Its disputant yields (`DisputeYield`) and releases
-its pledge. No member arms on it, and none signs a confiscation for it. This is judged from the
+its pledge, whether or not it armed: an un-armed disputant yields too, so no `DisputeEnter` on an
+answered ground stands for good (signet soak, 2026-11-14: three reference members left theirs on
+ledger J after its post-expiry rotation). No member arms on it, and none signs a confiscation for it.
+Vector: `post_expiry_rotation.json` (its `outcome` cases). This is judged from the
 ledger, not from the chain tip: the re-established quorum may itself have expired since, and that
 later expiry is a new ground, which takes a new `DisputeEnter` whose anchor is past the new
 `quorum_expiry`. A member MUST NOT let a live dispute on an earlier ground stand in for it.
@@ -237,6 +240,14 @@ The number of distinct quorum-member cosignatures an update requires depends on 
 Within the active period (`block_height < quorum_expiry`) every update requires `floor(n/2) + 1` cosignatures from distinct quorum members. This ensures a majority of the quorum has validated every update. Since each cosigner verifies chain continuity from their own tip, the operator cannot obtain a majority for two different updates at the same sequence number — at least one member of any majority will have already signed the other version and will refuse.
 
 Past `quorum_expiry`, value-moving operations become uncosignable (no threshold authorizes them); only *establishment operations* (`QuorumAddMember`, `QuorumRemoveMember`, `QuorumBegin`) can still be cosigned, and their required threshold cascades through the tiers in §Lifecycle as time passes.
+
+**A rotation past expiry is allowed, never owed** (every ruleset; it judges nothing; ruled 2026-11-14: "we can allow it, but we can't require members to sign"). An operator that missed its deadline MAY re-establish: a `QuorumBegin` past `quorum_expiry` is valid at the threshold of the tier at its `block_height`, as any other, until a confiscation of the vault confirms (DEP-06 §Race). Expiry released the members from their commitment, so none is obliged to take part:
+
+- A member MAY cosign the rotation's establishment operations, consent to a seat in the new quorum (DEP-11), and sign its rungs, exactly as it would before expiry. It MAY equally refuse any of them, by its own policy.
+- A refusal is never a fault. No proof, dispute or arm is grounded on it, and it is not silence that counts against the member in any liveness or penalty sense. Its only consequence is DEP-11's: a member whose consent has not arrived is not seated.
+- The new quorum is validated as any `QuorumBegin` is (its size, its threshold under the current tier, each seated member's `QuorumAddMember`, the expiry bound). It is the set of members that consented; nothing requires one of the expired quorum to appear in it.
+
+An implementation SHOULD cosign a post-expiry rotation by default when it would have cosigned the same rotation before expiry, and let its operator turn that off: re-establishment rescues an honest operator whose rotation was held up by others (signet soak, 2026-11-14: ledgers H, J and L, whose operators lost their rotation window to a defect in their own history lookup, re-established past expiry with their cl and reference members' cosignatures, and no confiscation followed). Vector: `post_expiry_rotation.json` (its `cosign` cases).
 
 ### Cosign Rounds
 
