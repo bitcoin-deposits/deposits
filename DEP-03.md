@@ -504,6 +504,51 @@ Concretely, once the confiscation confirms in block C:
 
 Vector: `armer_eligibility.json`, the case with a `confiscation_height`.
 
+**Arm manifests (`strict-lottery-v8`; ruled 2026-11-15, option A).** A `DisputeArmed` is an update
+on the armer's own fork. Nobody cosigns it, so DEP-02's six-block bound on a header's height never
+applies. Its height need only not decrease along that fork. An armer can therefore sign an arm with
+a height at or below C, or inside a re-arm window that has closed, and publish it after the spend
+confirmed. "Each armer's latest arm at or below C" then names a different arm for a judge that reads
+it later. That judge sees a different E, a different pledge cut and a different lottery, and can no
+longer rebuild the spend that confirmed. (cl-deposits `docs/ADVERSARIAL.md` §Backdated arms.)
+Under `strict-lottery-v8`, "latest" is therefore never used to judge a spend that exists:
+
+1. *The manifest.* Every signer of a confiscation, and of a re-arm spend (DEP-06 Phase 4),
+   publishes the arm set it built that spend from. The set names one arm per participant, as
+   (armer key, sequence). It travels as a Challenge Answer (DEP-06 §Spend challenge, Kind 9112),
+   with fields `round` and `arms`. Publishing one is permissionless. Any node that holds a
+   reproducing set may publish it: a watcher, an armer or any voter, signer or not. A judge accepts
+   a manifest whoever published it, because its validity and the rebuild are checked from public
+   state alone.
+2. *Validity.* A manifest is a valid arm set for round r's window `(o, c]` iff:
+   - every entry names a `DisputeArmed` on the dispute's forks;
+   - no armer is named twice;
+   - each named arm is among its armer's first four arms by sequence (every round counts);
+   - each named arm carries `rearm_round = r` (round 1: none);
+   - each named arm's signed height lies in `(o, c]`.
+
+   Round 1's window is `(−1, C]`.
+3. *The judge is existential.* The spend is honest iff some valid manifest, with E, the pledge
+   cut, grounded arms and the accused exclusion applied to exactly the arms it names, rebuilds the
+   spend byte for byte. Arms it does not name play no part: a backdated arm published later changes
+   nothing, and neither does a newcomer's arm or a ninth armer. The judge does not search subsets
+   of the latest arms first; it MAY do so as a fallback, and a match excuses the spend, since the
+   arms that search uses are a valid set.
+4. *Omission is policy, not a fault.* A manifest that leaves out an armer is still valid. Honest
+   signers include every armer they saw by the window's close. Leaving one out is no longer
+   provable. It becomes a choice the recovery threshold makes, as signing any spend is.
+5. *A judge without a manifest* never proves anything from a failed rebuild. It challenges, and a
+   lapse proves the spend, as for any anchored spend (DEP-06 §Spend challenge). A published manifest
+   that does not reproduce the spend is no answer.
+6. *The set after confirmation* is the confirmed output's: the participants of the valid manifest
+   whose lottery pays it. Reveals, claims, attestations, shares and the next re-arm round all use
+   that set. Members try published manifests first, then their cut, then the subsets of all armers.
+
+Before confirmation, voters still sign only a spend that is byte-identical to their own rebuild. A
+late backdated arm can therefore at most delay a spend until views converge. It cannot undo a spend
+that confirmed. Earlier rulesets are unchanged.
+Vector: `arm_manifest.json`.
+
 **One participant** takes custody without a draw: the lottery's primary leaf is
 `<participant_xonly> OP_CHECKSIG` (no preimage is revealed; the recovery leaves are unchanged).
 A floor of two would hand the veto back to a colluder: one honest armer plus one colluder with a
