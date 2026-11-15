@@ -385,9 +385,12 @@ a **new lottery output for a fresh arm round** over the same ledger: a new `Disp
 under the DEP-03 eligibility rule and its re-arm bound, after which the same claim rules apply.
 Honest voters MUST NOT sign a recovery spend that pays the accused operator, or that pays any
 destination other than the re-arm round's lottery output; such a spend is an unauthorised spend
-of disputed funds. *(Implementation status, 2026-11-05: cl-deposits orchestrates the round (arming, the voters'
-`lottery_rearm_sign`, the spend, reveal and claim); deposits-rust folds round-tagged arms but does not
-yet orchestrate a round, nor sign its spend.)*
+of disputed funds. *(Implementation status, 2026-11-14: cl-deposits orchestrates the round (arming, the voters'
+`lottery_rearm_sign`, the spend, reveal and claim). deposits-rust folds round-tagged arms (TLV 366,
+vectors `dispute_rearm.json` and `dispute_armed_round.json`) and, as a recovery voter, answers
+`lottery_rearm_sign`: it follows the lottery from the confiscation through each re-arm spend,
+rebuilds the next round's lottery and the spend, and signs only a byte-identical one through an
+open tier. It does not yet propose a spend, arm a later round, or reveal and claim in one.)*
 
 **The re-arm round, deterministically (draft, 2026-11-05).** Every honest voter must rebuild the
 same recovery spend byte for byte, so the round is fixed by public state alone:
