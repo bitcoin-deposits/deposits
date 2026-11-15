@@ -231,6 +231,20 @@ expired too they opened no new dispute, and the reference members, rightly, refu
 anchor older than the current expiry, so neither path could close the ledger.) Vector:
 `expiry_dispute_ends.json`.
 
+**Under `strict-lottery-v8`, only a confirmed re-establishment ends it** (DEP-18; judged under the
+ruleset at the dispute's fork point, never under the `QuorumBegin` being judged; ruled 2026-11-15 as
+an amendment to the post-expiry rotation rule, following the standing reading that only confirmed
+spends decide, as for an acquire). The dispute ends once some `QuorumBegin` after its
+`last_valid_sequence` has its spend of the vault confirmed (a rung of its ladder in a block; a
+`QuorumBegin` that funds a fresh vault rather than rotating one was checked on chain when it was
+cosigned). A recorded `QuorumBegin` that is still unspent leaves the dispute standing: its disputant
+does not yield, members still arm on it and sign its confiscation, and the race (DEP-06 §Race) goes
+on until one of the two spends confirms. Neither a mempool rotation nor a mempool confiscation
+decides it. (Regtest, 2026-11-15: a reference member yielded its armed stake when the operator
+recorded a post-expiry `QuorumBegin`, while its own confiscation of that vault sat in the mempool.
+The confiscation then confirmed and the rotation never could.) Rulesets before v8 keep the reading
+above. Vector: `expiry_dispute_ends.json` (its `ruleset` cases).
+
 If any check fails, the member MUST refuse to co-sign. The chain continuity check (1) is the primary defense against parallel chains — if the operator has published a non-conforming update that the member rejected, subsequent updates will have a different `previous_hash` and the member will refuse.
 
 ### Cosignature Threshold

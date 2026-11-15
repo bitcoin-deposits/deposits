@@ -664,7 +664,9 @@ appears on-chain.
 make a re-establishment invalid, and a rotation in the mempool does not end a dispute.
 
 - *Re-establishment confirmed first.* Its `QuorumBegin` (after the dispute's fork point) ends every
-  `quorum_expired` dispute on the ledger (DEP-05 §When a `quorum_expired` dispute ends). Each
+  `quorum_expired` dispute on the ledger (DEP-05 §When a `quorum_expired` dispute ends; under
+  `strict-lottery-v8` only once its spend confirms, so a recorded but unspent one leaves the race
+  open). Each
   disputant yields, armed or not, and every pledge and arm made for the dispute lapses: no
   confiscation, no lottery, no claim, and no loss to the pledger, whose replacement collateral is
   free again. A confiscation transaction for it, if any was signed, double-spends a spent vault and
@@ -709,7 +711,10 @@ Wallets must not accept post-dispute updates until the on-chain claim transactio
 - **Liveness of a recorded rotation.** Members sign a rotation's rungs after its `QuorumBegin` is
   final (DEP-03 §Rotation ordering). A majority of the spent vault's members that then refuses
   leaves the rotation recorded but unspent; no proof reaches that, as none reaches a refusal to
-  cosign.
+  cosign. Under `strict-lottery-v8` that no longer stalls a lapsed ledger: a recorded but unspent
+  `QuorumBegin` does not end an expiry dispute (DEP-05 §When a `quorum_expired` dispute ends), so
+  its members can still confiscate the vault. Before v8 it ends the dispute, and the vault waits on
+  the operator's later tiers.
 - **Answers need a relay.** A challenge lapses only if no answer reaches the judge in `w` blocks. A
   relay that censors answers for that long, while every honest holder of the answer is cut off from
   every relay the judge reads, convicts honest signers; a later answer still rebuts the proof for
