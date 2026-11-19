@@ -150,7 +150,7 @@ Challenge Answer events, Kind 9112), in any order and on any fork:
    tier the spend's witness uses reach that tier's threshold: valid cosignatures over the update, and
    the operator's own signature on it when the operator's key is one of the tier's (the tiers count
    every voter, the operator included, so a `QuorumBegin` cosigned to its own requirement, DEP-05
-   §Lifecycle, reaches the threshold of the tier that mirrors it). The txid commits to the whole spend, so nothing about it is rebuilt here;
+   §Lifecycle, reaches the threshold of the tier that mirrors it, but only when its rungs spend that tier: rungs planned before a tier opened and recorded after it spend the earlier tier, whose threshold DEP-05 §Cosignature Threshold's answer floor obliges the operator and members to meet). The txid commits to the whole spend, so nothing about it is rebuilt here;
    whether that `QuorumBegin` itself conforms is judged as for any update (`NonConformingUpdate`,
    `NonConformingCosignature`), not as a vault spend.
 2. **A confiscation**: the spend is an authorised confiscation (below), whose anchor is its dispute's
@@ -162,6 +162,8 @@ Challenge Answer events, Kind 9112), in any order and on any fork:
    `arms`; DEP-03 §Arm manifests). A manifest that does not reproduce the spend answers nothing.
    (Signet soak, 2026-11-04: the reference answered only rotation challenges, so a confiscation
    challenge lapsed unanswered and its proofs reached an honest member.)
+
+A node never presents a proof against its own key: its own signature in a witness is evidence of its own conduct, and a judgement that calls it theft is a fault in the judge (signet soak, 2026-11-19: C's operator proved itself and its four co-signers over its own honest rescue). It SHOULD say so loudly and judge the other signers on.
 
 A spend with an answer is excused. A spend without an anchor is proven at once (unanchored form). For
 an anchored spend without an answer, the judge does not prove anything. It records a challenge: it
