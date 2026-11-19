@@ -391,6 +391,14 @@ they win:
 - `replacement_collateral_amount`: the value (in sats) they pledge to the
   new vault from that UTXO
 
+A UTXO pledged in one live `DisputeArmed` MUST NOT be pledged in another dispute's: the first
+claim to land spends it, and every other claim built on it is then invalid, so the armer can
+never claim those lotteries (regtest, 2026-11-19: a member pledged one coin to several disputes
+and lost a won round-2 claim to `bad-txns-inputs-missingorspent`). An armer re-arming the same
+dispute keeps its earlier pledge while it is unspent. *Informative:* both implementations pick
+the smallest confirmed unpledged UTXO that covers the requirement, ties to the smaller
+`txid:vout`. Vector: `pledge_pick.json`.
+
 Which armers take part in the lottery (and, in a punitive dispute, receive a slashing share) is a
 deterministic function of the ledger and the confirmed chain, so every cosigner computes the same
 set and no single declaration can stall the dispute.
