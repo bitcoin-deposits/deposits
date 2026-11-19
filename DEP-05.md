@@ -266,7 +266,9 @@ An implementation SHOULD cosign a post-expiry rotation by default when it would 
 **A rotation is recorded only at its rungs' answer floor** (every ruleset; it changes no validity; signet soak, ledger C, 2026-11-16, found 2026-11-19). The tier a rotation's rungs spend is fixed when they are planned (DEP-03: the highest tier whose CLTV is satisfied then), while its `QuorumBegin`'s threshold is that of the lifecycle tier at its `block_height`. When a vault tier opens between the two, a `QuorumBegin` cosigned only to its own requirement can carry fewer cosignatures by the rungs' tier than DEP-06 §Spend challenge asks of the answer to a challenge of them, and then nothing answers the rungs: C's rescue was planned at tier 0 (5 of 8, the operator among them) just before tier 1 opened and recorded just after, with the 3 cosignatures tier 1 asks, where an answer at tier 0 needs 4. Its rung was signed by five, confirmed, challenged, and the lapsed challenge proved all five signers, the operator included. So:
 
 - An operator MUST NOT record a rotating `QuorumBegin` unless its valid cosignatures by keys of the tier its rungs spend, with its own signature when its key is one of them, reach that tier's threshold (its **answer floor**). Short of it, it records nothing and plans the rotation again, at the tier then open.
-- A member MUST NOT sign the rungs of a `QuorumBegin` below that floor: the rungs would be a spend no judge can answer, and every signer is among its accused.
+- A member MUST NOT sign the rungs of a `QuorumBegin` below that floor: the rungs would be a spend no judge can answer by the tier floor, and every signer is among its accused.
+
+The floor binds what is recorded from now on. A rotation already recorded below it, final under the ledger's own threshold where it was recorded, is answered under `strict-lottery-v8` by DEP-06 §Spend challenge's recorded-threshold answer (ruled 2026-11-19), so a rescue like C's stops drawing proofs; that rule asks no fewer cosignatures than this section did when the `QuorumBegin` was recorded.
 
 Vector: `rotation_answer_floor.json` (the signet updates themselves).
 
