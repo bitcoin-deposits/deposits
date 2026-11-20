@@ -180,6 +180,8 @@ The operator collects the threshold of co-signatures specified in DEP-05 §Lifec
 
 where `n` is the number of cosignature entries (0 before `QuorumBegin`). The operator signs after collecting the required majority of co-signatures. This seals the multilateral agreement — the operator's signature covers the content and all co-signatures.
 
+**Implementer note.** A node SHOULD durably store an update it signs before publishing it, and MUST NOT sign a different update at a (ledger, sequence) it has already signed: one that publishes first and stores after can lose a published update in a crash and, on retry, sign another at that sequence under a later header, which is an equivocation (DEP-06).
+
 ### Versions
 
 These are the v2 digests. Earlier digests (`deposits/cosign`, `deposits/cosign/v1`,
