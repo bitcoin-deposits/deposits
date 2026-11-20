@@ -217,8 +217,9 @@ after the label rule above was fixed, because the records were older than the fi
 **When a `quorum_expired` dispute ends.** Its ground is the expiry of the `QuorumBegin` governing at
 its `last_valid_sequence`. Re-establishment answers exactly that ground: once the operator's chain
 holds a `QuorumBegin` after the dispute's `last_valid_sequence`, the dispute is over unless its
-confiscation already confirmed (DEP-06 §Race). Its disputant yields (`DisputeYield`) and releases
-its pledge, whether or not it armed: an un-armed disputant yields too, so no `DisputeEnter` on an
+confiscation already confirmed (DEP-06 §Race). Its disputant MUST yield (`DisputeYield`) and release
+its pledge, whether or not it armed: an un-armed disputant yields too (DEP-06 §"Where a yield is
+valid": a disputed fork takes a `DisputeYield`), so no `DisputeEnter` on an
 answered ground stands for good (signet soak, 2026-11-14: three reference members left theirs on
 ledger J after its post-expiry rotation). No member arms on it, and none signs a confiscation for it.
 Vector: `post_expiry_rotation.json` (its `outcome` cases). This is judged from the

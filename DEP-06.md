@@ -379,6 +379,8 @@ The winner then:
 
 Losers append `DisputeYield` to their forks, transitioning them to Tombstoned state. Only the winner's fork continues as the canonical ledger.
 
+**Where a yield is valid.** A `DisputeYield` is valid on a fork in the Disputed state (it entered and has not armed) and on one in the Armed state (any round, after any collateral upgrade), and on no other: a fork that never entered a dispute, one already Tombstoned, and one whose `DisputeAcquire` stands (back in the Normal state) MUST refuse it, and every member replaying a fork MUST accept and refuse exactly these. A yield ends the fork's round; a later round's arm (Phase 4) can follow it. (Signet, 2026-11-20: deposits-rust refused an un-armed yield and cl-deposits accepted a yield in every state, so a Rust member's un-armed expiry dispute of ledger 5effb9e8 could not stand down after the quorum was re-established, and it then absorbed that member's punitive dispute of the same ledger.) Vector: `dispute_yield_states.json` (every state, armed and un-armed: `accept` or `reject`).
+
 **An acquire binds once its claim confirms** (`strict-lottery-v8`, DEP-18; ruled 2026-11-10). A
 `DisputeAcquire` is a statement about the chain: its `claim_txid` spent the lottery output. A
 `DisputeAcquire` MUST be treated as binding only if its `claim_txid` is a confirmed transaction AND
@@ -699,7 +701,7 @@ make a re-establishment invalid, and a rotation in the mempool does not end a di
   `quorum_expired` dispute on the ledger (DEP-05 §When a `quorum_expired` dispute ends; under
   `strict-lottery-v8` only once its spend confirms, so a recorded but unspent one leaves the race
   open). Each
-  disputant yields, armed or not, and every pledge and arm made for the dispute lapses: no
+  disputant MUST yield, armed or not (§"Where a yield is valid"), and every pledge and arm made for the dispute lapses: no
   confiscation, no lottery, no claim, and no loss to the pledger, whose replacement collateral is
   free again. A confiscation transaction for it, if any was signed, double-spends a spent vault and
   never confirms.
