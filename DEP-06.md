@@ -282,7 +282,7 @@ The lottery determines which quorum member takes custody of the disputed ledger.
 
 Each participating quorum member appends `DisputeArmed` to their fork with:
 
-- **commitment_hash**: `HASH160(preimage)` where `preimage` is a 17-to-76-byte random value chosen by the member, independent of how many others arm. The preimage's *length* contributes the entropy: `contribution = LEN(preimage) - 16` lies in `1..=60` (`LOTTERY_CONTRIBUTION_RANGE = 60`; 76 bytes stays within the 80-byte standard tapscript stack item).
+- **commitment_hash**: `HASH160(preimage)` where `preimage` is a 17-to-76-byte random value chosen by the member, independent of how many others arm. The preimage MUST be fresh per dispute and per round: a member MUST NOT commit, in a dispute or a re-arm round, a preimage it committed in another, including another dispute of the same ledger. A preimage revealed in one dispute is public, so reusing it lets anyone compute that participant's contribution before the next draw's arms close, and the lottery script commits to nothing but the participants' keys and hashes (not the ledger, the dispute or the round), so nothing on chain stops the reuse. A member that derives its preimage deterministically (to recover it after a restart) MUST bind the dispute's identity and the round into the derivation: at least the fork's `last_valid_sequence`, and it SHOULD also bind the chain hash of the update at the fork point (two disputes of one ledger can fork at one sequence on different branches). (cl-deposits before 2026-11-20 derived it from the node key and the ledger id alone, so every dispute of one ledger reused one preimage; deposits-rust binds `last_valid_sequence` and the round.) The preimage's *length* contributes the entropy: `contribution = LEN(preimage) - 16` lies in `1..=60` (`LOTTERY_CONTRIBUTION_RANGE = 60`; 76 bytes stays within the 80-byte standard tapscript stack item).
 - **target_reserves**: the bitcoin address where the member wants their winnings sent if they win
 - **armed_block**: the block height at time of arming
 - **replacement_collateral_outpoint**: txid + vout of an unspent UTXO the disputant controls and pledges to commit to the new vault if they win (see DEP-03 §"Replacement collateral declaration")
@@ -380,8 +380,30 @@ The winner then:
 Losers append `DisputeYield` to their forks, transitioning them to Tombstoned state. Only the winner's fork continues as the canonical ledger.
 
 **An acquire binds once its claim confirms** (`strict-lottery-v8`, DEP-18; ruled 2026-11-10). A
-`DisputeAcquire` is a statement about the chain: its `claim_txid` spent the lottery output. Until
-that transaction is confirmed, the acquire moves nothing: no member reads custody as moved
+`DisputeAcquire` is a statement about the chain: its `claim_txid` spent the lottery output. A
+`DisputeAcquire` MUST be treated as binding only if its `claim_txid` is a confirmed transaction AND
+that transaction's input 0 spends the dispute's current lottery outpoint: output 0 of the
+confiscation that spent the dispute's vault (any rung of the governing `QuorumBegin`'s fee ladder,
+DEP-03), or, after a re-arm, output 0 of the latest recovery spend in the chain of re-arm spends
+that leads back to that confiscation. Confirmation alone is not enough. Two disputes can lock
+lotteries at the same script and value (the script commits only to the participants' keys and
+hashes), so a confirmed claim of one dispute's lottery says nothing about another's, and any
+confirmed transaction at all could be named. (Regtest rearm-rust 1120-090836: a606a4ca's acquire
+named 21910507, a confirmed claim of 70b0abb3's round-2 output `46a66b12…:0`, while a606a4ca's own
+round-2 output `1d89bd45…:0` stayed unspent; every node read a606a4ca's custody as moved.) A judge
+finds this from the chain alone, walking back from the claim: the claim is not itself re-arm shaped
+(one input, one output, the input's nSequence a recovery tier's CSV, 144, 1008, 4032 or 8064, since
+such a transaction moved an older round's output on and claims nothing); its input 0 spends output
+0 of a transaction that either spends the vault, or is a confirmed re-arm spend whose input is in
+turn followed (at most 8 rounds). On a consistent chain this is the same answer as walking forward
+from the confiscation through each round. A judge that cannot see a transaction on the way, or
+sees the claim unconfirmed, reaches no verdict yet and asks again; any other answer is final.
+**A non-binding acquire is treated as absent**: it moves no custody, freezes no co-signing as
+"custody moved", is not adopted as the ledger's chain, does not end the lottery, and is not by
+itself evidence against its author (an acquire whose claim confirmed for some other dispute is
+false, but a judge has no proof type for it; the fork is simply not the winner's). Vector
+`acquire_binding.json` (shared by deposits-rust and cl-deposits, including the 1120-090836 case
+judged for both disputes). Until a binding claim exists, the acquire moves nothing: no member reads custody as moved
 (DEP-05 §Deposed operator), no loser yields to it, and the lottery is still live, so its reveals,
 claims and re-arm rounds go on as if the acquire were absent. A winner appends its acquire after
 broadcasting, as above, and others judge it when the claim confirms. One whose claim never
@@ -416,7 +438,7 @@ same recovery spend byte for byte, so the round is fixed by public state alone:
    366, DEP-02; round 1's arms carry none) and whose signed `block_height` lies in
    `(h_D, h_D + dispute_arm_blocks]`, each armer's latest one there, counted against the same
    four-arm bound as round 1 (DEP-03 §Eligibility snapshot), which spans every round. An armer that
-   arms in a round must commit a fresh preimage; the eligibility snapshot, its `E`, the pledge floor,
+   arms in a round MUST commit a fresh preimage (Phase 2: fresh per dispute and per round); the eligibility snapshot, its `E`, the pledge floor,
    grounded arms and the accused exclusion (DEP-03 §The accused never win) apply to these arms
    exactly as to round 1's.
 
@@ -711,7 +733,7 @@ Wallets continue addressing the same ledger by its `ledger_id`, accepting only r
 1. Query the network for dispute events (Kind 9103) on the ledger
 2. Replay ledger updates to identify the last valid sequence
 3. Look for `DisputeAcquire` events to identify the new operator and the `claim_txid`
-4. Wait for the lottery output's claim transaction to confirm on-chain and verify that the `DisputeAcquire`'s `claim_txid` matches a confirmed transaction that spends the expected lottery output (see DEP-03)
+4. Wait for the lottery output's claim transaction to confirm on-chain and verify that the `DisputeAcquire`'s `claim_txid` matches a confirmed transaction that spends the dispute's current lottery outpoint (§Phase 4, "An acquire binds once its claim confirms"; see DEP-03). A claim that spends any other outpoint, even one at the same address, does not move custody
 5. Verify the new operator's quorum and begin accepting their co-signed updates
 
 Wallets must not accept post-dispute updates until the on-chain claim transaction is confirmed. The claim transaction's witness satisfies the lottery script's `(sum mod N)`-th-disputant rule, so Bitcoin itself proves the new custodian is the script-selected winner. This prevents an attacker from publishing fake `DisputeAcquire` events claiming custody before the lottery resolves.
