@@ -395,9 +395,35 @@ A UTXO pledged in one live `DisputeArmed` MUST NOT be pledged in another dispute
 claim to land spends it, and every other claim built on it is then invalid, so the armer can
 never claim those lotteries (regtest, 2026-11-19: a member pledged one coin to several disputes
 and lost a won round-2 claim to `bad-txns-inputs-missingorspent`). An armer re-arming the same
-dispute keeps its earlier pledge while it is unspent. *Informative:* both implementations pick
-the smallest confirmed unpledged UTXO that covers the requirement, ties to the smaller
-`txid:vout`. Vector: `pledge_pick.json`.
+dispute keeps its earlier pledge while it is unspent.
+
+**When a pledge is live.** A pledge is live from the `DisputeArmed` that declares it until the
+dispute ends for its armer, which is the first of:
+
+- a `DisputeYield` on the armer's fork after that arm: a stand-down, or the yield of a lottery's
+  loser (the fork is then Tombstoned, DEP-06 §"Where a yield is valid"). A yield ends the round;
+  an arm for a later round (DEP-06 Phase 4) declares a pledge afresh, live again from that arm;
+- a binding `DisputeAcquire` by the armer (DEP-06 §"An acquire binds once its claim confirms"):
+  its claim spent the winner's pledge, or left it free. An acquire that does not bind yet ends
+  nothing, since its claim may still confirm and spend the pledge;
+- the armer's retiring the fork: dropping it as concluded or void.
+
+A member MUST treat a pledge as taken while it is live and MUST NOT treat it as taken once its
+dispute has ended for it. Counting every pledge ever declared is not conservative, it is a slow
+loss of the ability to arm: every dispute a member joins takes a coin for good, and a long-lived
+member ends with a wallet of coins none of which it may pledge (regtest, 2026-11-20: a reference
+member held 31 UTXOs and could arm on no new dispute, 30 of them taken by disputes that had long
+ended). A `DisputeEnter` declares no pledge, so a fork that has entered and not armed holds none on
+the ledger; a member that reserves a coin before arming holds that reservation while the dispute is
+live, under the same rule.
+
+Output 0 of the armer's binding claim pays the armer's own address but is the ledger's custody: a
+member MUST NOT pledge it while it is unspent and that acquire stands (no later round's
+`DisputeArmed` on the fork).
+
+*Informative:* both implementations pick the smallest confirmed UTXO that covers the requirement and
+is not taken, ties to the smaller `txid:vout`. Vector: `pledge_pick.json` (its `forks` cases fold a
+member's forks into what they still hold).
 
 Which armers take part in the lottery (and, in a punitive dispute, receive a slashing share) is a
 deterministic function of the ledger and the confirmed chain, so every cosigner computes the same
