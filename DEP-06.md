@@ -407,7 +407,11 @@ false, but a judge has no proof type for it; the fork is simply not the winner's
 `acquire_binding.json` (shared by deposits-rust and cl-deposits, including the 1120-090836 case
 judged for both disputes). Until a binding claim exists, the acquire moves nothing: no member reads custody as moved
 (DEP-05 §Deposed operator), no loser yields to it, and the lottery is still live, so its reveals,
-claims and re-arm rounds go on as if the acquire were absent. A winner appends its acquire after
+claims and re-arm rounds go on as if the acquire were absent. Once another participant's acquire binds for the
+round an armer armed in (or a later one), the lottery is over for that armer: it SHOULD append its
+`DisputeYield` as the loser, once, and its pledge is free whether or not it does (DEP-03 §"When a
+pledge is live"). A member that reads only "an unspent output pays our set" never sees this case,
+since the claim spent the output. A winner appends its acquire after
 broadcasting, as above, and others judge it when the claim confirms. One whose claim never
 confirms (a restart, a double spend by a later claim or a re-arm) binds nothing, however long it
 stays on the fork. Literal means confirmed, as for every spend a member judges: a transaction in the

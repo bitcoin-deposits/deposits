@@ -406,6 +406,17 @@ dispute ends for its armer, which is the first of:
 - a binding `DisputeAcquire` by the armer (DEP-06 §"An acquire binds once its claim confirms"):
   its claim spent the winner's pledge, or left it free. An acquire that does not bind yet ends
   nothing, since its claim may still confirm and spend the pledge;
+- a binding `DisputeAcquire` by **another** participant of the same dispute whose claim closes the
+  arm's round or a later one: the claim spent that round's lottery output, so the round is over
+  for every armer in it, whether or not the armer yielded. "The same dispute" means judged by
+  DEP-06 §"An acquire binds once its claim confirms" against the vault the armer's `DisputeEnter`
+  forked from; the round a binding claim closes is 1 when its input 0 spends the confiscation's
+  output 0, plus one for each re-arm spend the judge follows back. An acquire that does not bind
+  ends nothing, and one closing an earlier round ends nothing for an arm of a later round. A
+  member that reads such an acquire SHOULD append its own `DisputeYield` as the round's loser
+  (once: a yield of its already published at that sequence is adopted, never signed again, DEP-02);
+  the pledge is free whether or not it does (regtest 1121-next4c: 12 of a reference member's 25
+  holding forks were disputes another member had won and claimed, with no yield of the member's);
 - the armer's retiring the fork: dropping it as concluded or void.
 
 A member MUST treat a pledge as taken while it is live and MUST NOT treat it as taken once its
@@ -423,7 +434,14 @@ member MUST NOT pledge it while it is unspent and that acquire stands (no later 
 
 *Informative:* both implementations pick the smallest confirmed UTXO that covers the requirement and
 is not taken, ties to the smaller `txid:vout`. Vector: `pledge_pick.json` (its `forks` cases fold a
-member's forks into what they still hold).
+member's forks into what they still hold, an `others` list carrying the rounds of other participants'
+acquires and whether each binds); `acquire_binding.json` gives each case's `round`.
+
+*Informative, local policy and not protocol:* both implementations keep a reserve for new disputes.
+A re-arm (round 2 or later) of an old dispute pledges a new coin only while more than the reserve's
+count of free coins cover its requirement (default 2; deposits-rust `DEPOSITS_REARM_PLEDGE_RESERVE`,
+cl-deposits `CLD_REARM_PLEDGE_RESERVE`), and logs when it skips; a new dispute's round-1 arm may take
+the last coins, since not arming a new dispute is what dereliction is judged on.
 
 Which armers take part in the lottery (and, in a punitive dispute, receive a slashing share) is a
 deterministic function of the ledger and the confirmed chain, so every cosigner computes the same
