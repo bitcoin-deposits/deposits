@@ -468,7 +468,8 @@ below the highest `last_valid_sequence` any `DisputeEnter` names: the `QuorumBeg
 vault being confiscated. A disputant takes part only through its latest `DisputeEnter` (highest
 sequence) whose `last_valid_sequence` is at or above Q, and only through its updates after that
 fork point (its arms, its `ObligationRecord`s); a disputant with no such `DisputeEnter` takes no
-part. The fork point, the anchor, the shape (respectful or punitive), the armers and the obligations
+part. Its other `DisputeEnter`s, earlier or later (a repeat entry), take no part either: they name
+no fork point and their grounds are not counted. The fork point, the anchor, the shape (respectful or punitive), the armers and the obligations
 are all read from the dispute so reduced, by every builder, cosigner, watch and verifier alike, and
 so are the lottery's recovery voters (DEP-06 Phase 3: Q's members less the operator), every
 re-arm round's arms and the four-arm bound (DEP-06 Phase 4) and the arms a manifest may name
@@ -582,11 +583,15 @@ Concretely, once the confiscation confirms in block C:
   does not. It names no fork point (§"The dispute"), its grounds are not counted (so the keys its
   proof convicts are not in `Accused(grounds)`, and the recovery voters do not change), and it admits
   its author to no later re-arm round. Each disputant's part is through its latest `DisputeEnter` at
-  or below C, if it has one. Otherwise a proof re-sent after the confiscation, verified and entered
-  on by a member that missed this rule, could convict a participant of a later round and cut its
-  arm, or change the voters of a lottery already on chain (regtest 12bc96d2, 2026-11-21: a
+  or below C whose `last_valid_sequence` is at or above Q, if it has one, and Q itself is read over
+  the `DisputeEnter`s at or below C: C is the block the spend of that Q's vault confirmed in, so a
+  later `DisputeEnter` naming a higher fork point cannot move Q, the vault or C. A restarted member
+  knows C from the chain before it judges anything by it. Otherwise a proof re-sent after the
+  confiscation, verified and entered on by a member that missed this rule, could convict a
+  participant of a later round and cut its arm, or change the voters of a lottery already on chain (regtest 12bc96d2, 2026-11-21: a
   `NonConformingCosignature` entered at block 34763, against a confiscation at 23996, convicted
-  c30c1b29 and emptied round 2). Vector: `rearm_round_agree.json`, the `late_enter` case.
+  c30c1b29 and emptied round 2). Vector: `rearm_round_agree.json`, the `late_enter` cases (the
+  12bc96d2 data, and two repeat entries on it: one below Q, one naming a higher fork point).
 
 Vector: `armer_eligibility.json`, the case with a `confiscation_height`.
 
