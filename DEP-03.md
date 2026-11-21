@@ -428,9 +428,19 @@ ended). A `DisputeEnter` declares no pledge, so a fork that has entered and not 
 the ledger; a member that reserves a coin before arming holds that reservation while the dispute is
 live, under the same rule.
 
-Output 0 of the armer's binding claim pays the armer's own address but is the ledger's custody: a
-member MUST NOT pledge it while it is unspent and that acquire stands (no later round's
-`DisputeArmed` on the fork).
+Output 0 of a lottery claim pays the winner's own address but is the ledger's custody: a member
+MUST NOT pledge any coin that is a lottery claim's output 0 while it is unspent, whatever its own
+records say. Its records are not enough: a member that claims a lottery and records its
+`DisputeAcquire` on the wrong fork, or never records it, or later appends a `DisputeArmed` to the
+fork that recorded it, holds a coin no acquire of its names, and pledging it lets an unrelated
+dispute's claim spend a ledger's reserves (regtest 1121-next4c: a reference member claimed one
+ledger's lottery output as another's, recorded the acquire on the other's fork, and pledged the
+claim's output on a third ledger's dispute; 14 of its 31 coins were claim outputs and 7 were
+pledged, because a claim's output is often the smallest coin that covers a pledge). Identify the
+coin on chain: the transaction that created it has one output, and its input 0 spends output 0 of
+its prevout through a taproot script path (the witness ends in a control block) with nSequence
+`0xfffffffd` or `LOTTERY_REVEAL_CSV`. A member that cannot read the creating transaction does not
+pledge the coin on that pass. Vector: `custody_coin.json` (real transactions).
 
 *Informative:* both implementations pick the smallest confirmed UTXO that covers the requirement and
 is not taken, ties to the smaller `txid:vout`. Vector: `pledge_pick.json` (its `forks` cases fold a
