@@ -326,7 +326,7 @@ it takes custody without a draw.
             for i in 0..m:  OP_DUP <i> OP_EQUAL OP_IF OP_DROP <pk_{s_i}> OP_CHECKSIG OP_ELSE
             OP_DROP OP_0  m × OP_ENDIF
 
-`v_0 … v_{r-1}` are the recovery voters sorted by x-only key and T the recovery threshold. **The recovery voters** are the members, other than the original operator (the author of sequence 0), of the `QuorumBegin` governing the confiscated vault: the latest `QuorumBegin` authored by the original operator at a sequence ≤ the dispute's fork point (the lowest `last_valid_sequence` any `DisputeEnter` names). Later `QuorumBegin`s (past the fork point, or on any fork) do not count. T = ⌊r/2⌋ + 1. *Under `strict-lottery-v8` (provisional, review):* the recovery voters are those members minus every
+`v_0 … v_{r-1}` are the recovery voters sorted by x-only key and T the recovery threshold. **The recovery voters** are the members, other than the original operator (the author of sequence 0), of the `QuorumBegin` governing the confiscated vault: the latest `QuorumBegin` authored by the original operator at a sequence ≤ the dispute's fork point (the lowest `last_valid_sequence` any `DisputeEnter` of the current dispute names, DEP-03 §"The dispute"). That `QuorumBegin` is always Q, the one that created the vault being confiscated: a stale `DisputeEnter` below Q (a dispute of a vault since rotated away, yielded or not) names no fork point, and reading the lowest over every `DisputeEnter` takes the voters to a `QuorumBegin` whose vault is gone (regtest 8082521c, 2026-11-20: a stale yielded expiry dispute at sequence 4 under a confiscation of QuorumBegin 8's vault; vector case `stale_enter_below_q_takes_no_part`). Later `QuorumBegin`s (past the fork point, or on any fork) do not count. T = ⌊r/2⌋ + 1. *Under `strict-lottery-v8` (provisional, review):* the recovery voters are those members minus every
 key in Accused(grounds) (DEP-03 §The accused never win), and r, T and every tier threshold are
 computed over that reduced set by the same rules (T = ⌊r/2⌋ + 1; tiers T, T−1, T−2, 1, each at least
 1). If no voter remains, the whole quorum is accused: the lottery has only its full-set leaf (or the
@@ -440,10 +440,14 @@ same recovery spend byte for byte, so the round is fixed by public state alone:
    reveal deadline. The round opens at `h_D` iff no participant's valid reveal (hashing to its
    commitment) is on the relay or in a claim witness. A voter that cannot read the relay reaches no
    verdict, as for a lapse (§Spend challenge).
-2. *Its arms.* The `DisputeArmed` updates on the dispute's forks that carry `rearm_round = r` (TLV
+2. *Its arms.* The `DisputeArmed` updates on the current dispute's forks (DEP-03 §"The dispute": a fork whose latest `DisputeEnter` is below Q takes no part, and its holder MUST NOT arm a round on it) that carry `rearm_round = r` (TLV
    366, DEP-02; round 1's arms carry none) and whose signed `block_height` lies in
    `(h_D, h_D + dispute_arm_blocks]`, each armer's latest one there, counted against the same
-   four-arm bound as round 1 (DEP-03 §Eligibility snapshot), which spans every round. An armer that
+   four-arm bound as round 1 (DEP-03 §Eligibility snapshot), which spans every round: precisely,
+   the latest by sequence of the armer's first four arms in the current dispute (every round, every
+   height) that is of round r and signed inside the window; an arm outside the window or of another
+   round counts against the bound but never displaces one inside it (vectors
+   `rearm_window_arms.json`, `rearm_round_agree.json`). An armer that
    arms in a round MUST commit a fresh preimage (Phase 2: fresh per dispute and per round); the eligibility snapshot, its `E`, the pledge floor,
    grounded arms and the accused exclusion (DEP-03 §The accused never win) apply to these arms
    exactly as to round 1's.
