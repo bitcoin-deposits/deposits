@@ -437,7 +437,17 @@ vault being confiscated. A disputant takes part only through its latest `Dispute
 sequence) whose `last_valid_sequence` is at or above Q, and only through its updates after that
 fork point (its arms, its `ObligationRecord`s); a disputant with no such `DisputeEnter` takes no
 part. The fork point, the anchor, the shape (respectful or punitive), the armers and the obligations
-are all read from the dispute so reduced, by every builder, cosigner, watch and verifier alike.
+are all read from the dispute so reduced, by every builder, cosigner, watch and verifier alike, and
+so are the lottery's recovery voters (DEP-06 Phase 3: Q's members less the operator), every
+re-arm round's arms and the four-arm bound (DEP-06 Phase 4) and the arms a manifest may name
+(§Arm manifests). A fork that takes no part arms no round: its arms are no arms, in any round and
+against no bound, and its holder MUST NOT arm a later round on it (it may enter the current
+dispute afresh, at or above Q). (Regtest, 2026-11-20/21: cld364 entered 8082521c and four other
+ledgers at their first QuorumBegin and yielded when the next re-established the quorum; deposits-rust
+then read the voters over its stale DisputeEnter, from the old QuorumBegin, and never found the
+lotteries the confiscations paid, while cl-deposits re-armed round 2 on the stale fork on every
+pass of every window, since its own arms, rightly uncounted, never showed in the checks meant to
+stop it. Vector `rearm_round_agree.json`.)
 (Signet soak, 2026-11-02: one disputant's stale `DisputeEnter` moved a watch's fork point below the
 builders', so the watch's anchor missed the real confiscation; its challenge lapsed into contagion
 proofs against three honest cosigners.) A judge also excuses a confiscation built under the reading
