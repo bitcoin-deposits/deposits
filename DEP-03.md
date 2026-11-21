@@ -514,7 +514,8 @@ participant. The operator was always excluded ("it cannot dispute its own ledger
 that signed the fault is complicit in it (DEP-05 §Co-signing), so neither may take custody of the
 ledger whose fault it signed. `Accused(grounds)` is the operator of the update at the dispute's
 `last_valid_sequence`, plus, for each `DisputeEnter` counted in the current dispute (under
-`grounded-arms-v7`, each grounded one), the keys its carried proof (TLV 345) convicts from its own
+`grounded-arms-v7`, each grounded one; once the confiscation confirms, none signed above its block:
+§When the set is final), the keys its carried proof (TLV 345) convicts from its own
 evidence:
 
 | Ground | Keys it convicts |
@@ -577,6 +578,15 @@ Concretely, once the confiscation confirms in block C:
   restart, or a fork DisputeEnter replayed by the relay, does not reopen it.
 - A member looking for the landed confiscation starts its search at the dispute's first arm, not at
   E. Arms published after C would otherwise lift the search past the confiscation it is looking for.
+- A `DisputeEnter` whose signed header is above C takes no part in the dispute, as an arm above C
+  does not. It names no fork point (§"The dispute"), its grounds are not counted (so the keys its
+  proof convicts are not in `Accused(grounds)`, and the recovery voters do not change), and it admits
+  its author to no later re-arm round. Each disputant's part is through its latest `DisputeEnter` at
+  or below C, if it has one. Otherwise a proof re-sent after the confiscation, verified and entered
+  on by a member that missed this rule, could convict a participant of a later round and cut its
+  arm, or change the voters of a lottery already on chain (regtest 12bc96d2, 2026-11-21: a
+  `NonConformingCosignature` entered at block 34763, against a confiscation at 23996, convicted
+  c30c1b29 and emptied round 2). Vector: `rearm_round_agree.json`, the `late_enter` case.
 
 Vector: `armer_eligibility.json`, the case with a `confiscation_height`.
 
