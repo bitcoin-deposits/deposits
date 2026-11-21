@@ -440,7 +440,11 @@ pledged, because a claim's output is often the smallest coin that covers a pledg
 coin on chain: the transaction that created it has one output, and its input 0 spends output 0 of
 its prevout through a taproot script path (the witness ends in a control block) with nSequence
 `0xfffffffd` or `LOTTERY_REVEAL_CSV`. A member that cannot read the creating transaction does not
-pledge the coin on that pass. Vector: `custody_coin.json` (real transactions).
+pledge the coin on that pass. Vector: `custody_coin.json` (real transactions). A participant whose declared pledge
+is such a coin MUST NOT claim with it, and MUST NOT claim with another coin instead (§Claim
+transaction: input 1 is the declared collateral, anything else is a `WinnerCollateralDeviation`): while
+the dispute's vault is unspent it re-arms with a fresh pledge (a re-arm replaces the declaration,
+§Eligibility snapshot), and once the vault is confiscated it arms the next round with one.
 
 *Informative:* both implementations pick the smallest confirmed UTXO that covers the requirement and
 is not taken, ties to the smaller `txid:vout`. Vector: `pledge_pick.json` (its `forks` cases fold a
