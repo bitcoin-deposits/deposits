@@ -230,7 +230,15 @@ later expiry is a new ground, which takes a new `DisputeEnter` whose anchor is p
 re-established, because they only stood down while the new quorum was live. When the new quorum
 expired too they opened no new dispute, and the reference members, rightly, refused to arm on an
 anchor older than the current expiry, so neither path could close the ledger.) Vector:
-`expiry_dispute_ends.json`.
+`expiry_dispute_ends.json`. Our own fork on the answered ground, armed or not, carries no later dispute of
+the ledger, which forks afresh (under `strict-lottery-v8`, once the re-establishment's spend
+confirmed). The ledger's latest `QuorumBegin` is the one that answers, wherever it lies: an
+implementation that keeps only a recent window of a ledger in memory MUST NOT judge it from that
+window. (Signet soak, 2026-11-22: deposits-rust ref4's un-armed fork of ledger 0aeebcc5 at 359090 was
+re-established at 359228; its 50 000-update window began past the last `QuorumBegin`, so it never
+yielded, and it carried the dispute of the re-established quorum's own expiry.) Vector:
+`expiry_dispute_ends.json` (its `fork_reuse` cases, and the `ended` case naming a
+`history_window_from`).
 
 **Under `strict-lottery-v8`, only a confirmed re-establishment ends it** (DEP-18; judged under the
 ruleset at the dispute's fork point, never under the `QuorumBegin` being judged; ruled 2026-11-15 as
