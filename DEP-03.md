@@ -402,7 +402,11 @@ dispute ends for its armer, which is the first of:
 
 - a `DisputeYield` on the armer's fork after that arm: a stand-down, or the yield of a lottery's
   loser (the fork is then Tombstoned, DEP-06 §"Where a yield is valid"). A yield ends the round;
-  an arm for a later round (DEP-06 Phase 4) declares a pledge afresh, live again from that arm;
+  an arm for a later round (DEP-06 Phase 4) declares a pledge afresh, live again from that arm.
+  Under `yield-evidence-v9` only a yield whose reason checks ends it (DEP-06 §"What a yield must
+  say"); a void yield ends nothing. A yield's release is never undone: a later binding claim by
+  the yielder of the same round (DEP-06 §"A claim after the claimant's own yield") makes it the
+  custodian, and its claim's output 0 is custody (below), but the pledge was free from the yield;
 - a binding `DisputeAcquire` by the armer (DEP-06 §"An acquire binds once its claim confirms"):
   its claim spent the winner's pledge, or left it free. An acquire that does not bind yet ends
   nothing, since its claim may still confirm and spend the pledge;
@@ -428,7 +432,7 @@ ended). A `DisputeEnter` declares no pledge, so a fork that has entered and not 
 the ledger; a member that reserves a coin before arming holds that reservation while the dispute is
 live, under the same rule.
 
-Output 0 of a lottery claim pays the winner's own address but is the ledger's custody: a member
+Output 0 of a lottery claim pays the winner's own address but is the ledger's custody (including a claim the winner made after its own yield, DEP-06 §"A claim after the claimant's own yield"): a member
 MUST NOT pledge any coin that is a lottery claim's output 0 while it is unspent, whatever its own
 records say. Its records are not enough: a member that claims a lottery and records its
 `DisputeAcquire` on the wrong fork, or never records it, or later appends a `DisputeArmed` to the

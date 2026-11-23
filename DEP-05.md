@@ -221,7 +221,10 @@ confiscation already confirmed (DEP-06 §Race). Its disputant MUST yield (`Dispu
 its pledge, whether or not it armed: an un-armed disputant yields too (DEP-06 §"Where a yield is
 valid": a disputed fork takes a `DisputeYield`), so no `DisputeEnter` on an
 answered ground stands for good (signet soak, 2026-11-14: three reference members left theirs on
-ledger J after its post-expiry rotation). No member arms on it, and none signs a confiscation for it.
+ledger J after its post-expiry rotation). Under `yield-evidence-v9` that yield names the
+re-establishing `QuorumBegin` by its `content_hash` (`reestablished`, DEP-06 §"What a yield must
+say"), so a stand-down read off the chain tip alone, which names nothing, is never signed. No member
+arms on it, and none signs a confiscation for it.
 Vector: `post_expiry_rotation.json` (its `outcome` cases). This is judged from the
 ledger, not from the chain tip: the re-established quorum may itself have expired since, and that
 later expiry is a new ground, which takes a new `DisputeEnter` whose anchor is past the new
