@@ -473,7 +473,9 @@ vault being confiscated. A disputant takes part only through its latest `Dispute
 sequence) whose `last_valid_sequence` is at or above Q, and only through its updates after that
 fork point (its arms, its `ObligationRecord`s); a disputant with no such `DisputeEnter` takes no
 part. Its other `DisputeEnter`s, earlier or later (a repeat entry), take no part either: they name
-no fork point and their grounds are not counted. The fork point, the anchor, the shape (respectful or punitive), the armers and the obligations
+no fork point and their grounds are not counted. A later `DisputeEnter` after a `DisputeYield` on
+the disputant's counted fork becomes its counted one only once that yield is judged valid (DEP-06
+"A yield binds only its author"); until then the yielded fork is the disputant's. The fork point, the anchor, the shape (respectful or punitive), the armers and the obligations
 are all read from the dispute so reduced, by every builder, cosigner, watch and verifier alike, and
 so are the lottery's recovery voters (DEP-06 Phase 3: Q's members less the operator), every
 re-arm round's arms and the four-arm bound (DEP-06 Phase 4) and the arms a manifest may name
