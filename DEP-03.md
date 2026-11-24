@@ -499,7 +499,15 @@ part. Its other `DisputeEnter`s, earlier or later (a repeat entry), take no part
 no fork point and their grounds are not counted. Latest counts (ruled 2026-11-24): a later
 `DisputeEnter` supersedes the disputant's earlier fork, whatever that fork's `DisputeYield` says
 or whether it yielded at all (DEP-06 "A yield binds only its author"), and superseding ends no
-pledge (§"When a pledge is live"). The fork point, the anchor, the shape (respectful or punitive), the armers and the obligations
+pledge (§"When a pledge is live"). Two exceptions, applied alike by every scope and by a member
+taking a new entry over a fork it holds: a fork on which its author signed a `DisputeAcquire` is
+never superseded (its author is the custodian, and its later entries take no part); and at the
+same sequence a `DisputeEnter` supersedes only when it is punitive and the counted one is for a
+lapsed quorum (`quorum_expired`, DEP-06 reason 4), the counted one standing otherwise (the
+earlier held, between two of the same kind). Taking the entries in sequence order, the counted
+one is the first, replaced by each later one these rules let supersede it. An entry signed onto
+its fork's own tip (a continuation) is taken the same way: it is later, so it counts from its own
+fork point. The fork point, the anchor, the shape (respectful or punitive), the armers and the obligations
 are all read from the dispute so reduced, by every builder, cosigner, watch and verifier alike, and
 so are the lottery's recovery voters (DEP-06 Phase 3: Q's members less the operator), every
 re-arm round's arms and the four-arm bound (DEP-06 Phase 4) and the arms a manifest may name
