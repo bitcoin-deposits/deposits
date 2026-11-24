@@ -421,7 +421,30 @@ dispute ends for its armer, which is the first of:
   (once: a yield of its already published at that sequence is adopted, never signed again, DEP-02);
   the pledge is free whether or not it does (regtest 1121-next4c: 12 of a reference member's 25
   holding forks were disputes another member had won and claimed, with no yield of the member's);
-- the armer's retiring the fork: dropping it as concluded or void.
+- the armer's retiring the fork as void (DEP-06 §"The accused never disputes itself": a fork of a
+  ledger the armer operates is no dispute). Concluded, a fork is retired by one of the three ends
+  above, which already freed its pledges; retiring it frees nothing more.
+
+**Superseding ends no pledge** (ruled 2026-11-24). A later `DisputeEnter` of the armer's that
+supersedes its fork for the scope (§"The dispute") is not the end of that fork's dispute for its
+pledges, and neither is anything that follows only from it: the arm leaving the scope, a member
+taking the new entry over the fork, the armer dropping or replacing its record of the fork (one
+key, one fork per ledger, in an implementation that keeps it so), or the new fork's own arms,
+yields and outcome. A pledge on a superseded fork stays held until one of:
+
+- its own valid `DisputeYield` on that fork (the first bullet; a yield void when the new entry
+  arrives counts from when its reason checks, such as the claim a `lost_to` names confirming);
+- a binding `DisputeAcquire` for its round or a later one, by the armer on that fork, or by
+  **anyone** in the same dispute (the second and third bullets, judged against the vault the
+  superseded fork's `DisputeEnter` forked from);
+- the fork's retirement as void (the bullet above).
+
+The conditions that retire a fork without a re-entry are exactly these: a valid yield, a binding
+claim (its own, or anyone's for its round or later), and voidness. A tip height, a later
+`QuorumBegin` alone, a re-arm of the new fork, and a `superseded_by` yield on a fork that armed
+(invalid, DEP-06 reason 4) end nothing. The superseding fork may declare the same coin again: it
+stays one pledge, held while either fork holds it. Vector `enter_after_yield.txt` (its pledge
+cases), shared by deposits-rust and cl-deposits.
 
 A member MUST treat a pledge as taken while it is live and MUST NOT treat it as taken once its
 dispute has ended for it. Counting every pledge ever declared is not conservative, it is a slow
@@ -473,9 +496,10 @@ vault being confiscated. A disputant takes part only through its latest `Dispute
 sequence) whose `last_valid_sequence` is at or above Q, and only through its updates after that
 fork point (its arms, its `ObligationRecord`s); a disputant with no such `DisputeEnter` takes no
 part. Its other `DisputeEnter`s, earlier or later (a repeat entry), take no part either: they name
-no fork point and their grounds are not counted. A later `DisputeEnter` after a `DisputeYield` on
-the disputant's counted fork becomes its counted one only once that yield is judged valid (DEP-06
-"A yield binds only its author"); until then the yielded fork is the disputant's. The fork point, the anchor, the shape (respectful or punitive), the armers and the obligations
+no fork point and their grounds are not counted. Latest counts (ruled 2026-11-24): a later
+`DisputeEnter` supersedes the disputant's earlier fork, whatever that fork's `DisputeYield` says
+or whether it yielded at all (DEP-06 "A yield binds only its author"), and superseding ends no
+pledge (§"When a pledge is live"). The fork point, the anchor, the shape (respectful or punitive), the armers and the obligations
 are all read from the dispute so reduced, by every builder, cosigner, watch and verifier alike, and
 so are the lottery's recovery voters (DEP-06 Phase 3: Q's members less the operator), every
 re-arm round's arms and the four-arm bound (DEP-06 Phase 4) and the arms a manifest may name
