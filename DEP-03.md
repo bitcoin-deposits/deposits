@@ -492,10 +492,11 @@ set and no single declaration can stall the dispute.
 away (a dispute that went dormant, or was entered on a proof that did not verify); it is no part of
 the current dispute. Let Q be the sequence of the original operator's latest `QuorumBegin` at or
 below the highest `last_valid_sequence` any `DisputeEnter` names: the `QuorumBegin` that created the
-vault being confiscated. A disputant takes part only through its **counted** `DisputeEnter` and the updates on that
-entry's fork chain: its own updates linked from the entry by `previous_hash` (each the chain hash
-of the entry or of one already on the chain), after the entry's fork point (its arms, its
-`ObligationRecord`s). Its other `DisputeEnter`s (below Q, superseded, or not superseding) and every
+vault being confiscated. A disputant takes part only through its **counted** `DisputeEnter` and the updates on the chain
+that entry is on, after the entry's fork point (its arms, its `ObligationRecord`s): the chain is
+the disputant's own updates linked by `previous_hash` (each the chain hash of the one before),
+from the first of them (the `DisputeEnter` that forked from the ledger) through every update
+chained after it, so a continuation shares its fork's chain. Its other `DisputeEnter`s (below Q, superseded, or not superseding) and every
 update on another of its forks take no part: they name no fork point, their grounds are not
 counted, and an arm on a superseded fork is no arm of the dispute even above the counted fork
 point. A disputant with no `DisputeEnter` whose `last_valid_sequence` is at or above Q takes no
